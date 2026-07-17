@@ -47,21 +47,11 @@ class SpotifyManager:
         item = playback['item']
         track_id = item['id']
         
-        # Fetch audio features if not in cache
+        # Spotify deprecated the audio_features endpoint in Nov 2024.
+        # It will return 403 Forbidden for all new apps.
+        # We will just use the default fallback values to keep animations running smoothly.
         if track_id not in self.audio_features_cache:
-            try:
-                features = self.sp.audio_features([track_id])[0]
-                if features:
-                    self.audio_features_cache[track_id] = {
-                        "bpm": features.get("tempo", 120.0),
-                        "energy": features.get("energy", 0.5),
-                        "valence": features.get("valence", 0.5)
-                    }
-                else:
-                    self.audio_features_cache[track_id] = {"bpm": 120.0, "energy": 0.5, "valence": 0.5}
-            except Exception as e:
-                print(f"Error fetching audio features: {e}")
-                self.audio_features_cache[track_id] = {"bpm": 120.0, "energy": 0.5, "valence": 0.5}
+            self.audio_features_cache[track_id] = {"bpm": 120.0, "energy": 0.5, "valence": 0.5}
                 
         audio_features = self.audio_features_cache[track_id]
         

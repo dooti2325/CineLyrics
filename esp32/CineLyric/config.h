@@ -6,8 +6,8 @@ const char *const WIFI_SSID = "Dooti_S23";
 const char *const WIFI_PASSWORD = "123456789";
 
 // WebSocket Server Configuration
-const char *const WEBSOCKET_HOST ="10.143.179.224"; // IP address of your Python server
-const int WEBSOCKET_PORT = 8000;
+const char *const WEBSOCKET_HOST ="cinelyrics.onrender.com"; // Your Render URL (without https://)
+const int WEBSOCKET_PORT = 443; // 443 for secure websockets (WSS)
 const char *const WEBSOCKET_PATH = "/ws";
 
 // Display Configuration

@@ -1,16 +1,31 @@
+import json
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI
+from spotipy.cache_handler import CacheFileHandler, MemoryCacheHandler
+from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, SPOTIFY_CACHE_INFO
 
 class SpotifyManager:
     def __init__(self):
         self.sp = None
         if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+            cache_handler = None
+            if SPOTIFY_CACHE_INFO:
+                try:
+                    token_info = json.loads(SPOTIFY_CACHE_INFO)
+                    cache_handler = MemoryCacheHandler(token_info=token_info)
+                    print("Using MemoryCacheHandler from SPOTIFY_CACHE_INFO env variable")
+                except json.JSONDecodeError:
+                    print("ERROR: SPOTIFY_CACHE_INFO is not valid JSON")
+                    cache_handler = CacheFileHandler(cache_path=".cache")
+            else:
+                cache_handler = CacheFileHandler(cache_path=".cache")
+                
             auth_manager = SpotifyOAuth(
                 client_id=SPOTIFY_CLIENT_ID,
                 client_secret=SPOTIFY_CLIENT_SECRET,
                 redirect_uri=SPOTIFY_REDIRECT_URI,
-                scope="user-read-playback-state"
+                scope="user-read-playback-state",
+                cache_handler=cache_handler
             )
             self.sp = spotipy.Spotify(auth_manager=auth_manager)
         self.audio_features_cache = {}

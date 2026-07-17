@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+websockets
+spotipy
+python-dotenv
+requests
+aiohttp

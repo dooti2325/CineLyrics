@@ -63,6 +63,7 @@ class SpotifyManager:
             "progress_ms": playback.get('progress_ms', 0),
             "is_playing": playback.get('is_playing', False),
             "duration_ms": item['duration_ms'],
+            "preview_url": item.get('preview_url'),
             "bpm": audio_features["bpm"],
             "energy": audio_features["energy"],
             "valence": audio_features["valence"]

@@ -15,4 +15,8 @@ const char *const WEBSOCKET_PATH = "/ws";
 #define OLED_SCL 22
 #define OLED_RST U8X8_PIN_NONE // Usually none for I2C
 
+// Touch Sensor Configuration
+#define TOUCH_PIN 4        // Change to the pin connected to your capacitive touch sensor (e.g., T0 is GPIO 4)
+#define TOUCH_THRESHOLD 40 // Adjust this if using internal touchRead. If using a digital module, this is ignored.
+
 #endif // CONFIG_H

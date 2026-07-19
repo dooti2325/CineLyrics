@@ -4,6 +4,8 @@
 // Initialize U8G2 object for SH1106 (Full frame buffer)
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, OLED_RST, OLED_SCL, OLED_SDA);
 
+bool isDisplayInverted = false;
+
 void displaySetup() {
     u8g2.begin();
     u8g2.setContrast(255);
@@ -14,6 +16,11 @@ void displayClear() {
 }
 
 void displayUpdate() {
+    if (isDisplayInverted) {
+        u8g2.setDrawColor(2); // XOR mode
+        u8g2.drawBox(0, 0, 128, 64);
+        u8g2.setDrawColor(1); // Restore default
+    }
     u8g2.sendBuffer();
 }
 

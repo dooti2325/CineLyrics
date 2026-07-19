@@ -6,14 +6,14 @@ from anyascii import anyascii
 
 from spotify import SpotifyManager
 from lyrics import LyricsManager
-from animation import AnimationSelector
+from ai_director import AIDirector
 from websocket_server import WebSocketConnectionManager
 
 app = FastAPI()
 ws_manager = WebSocketConnectionManager()
 spotify_manager = SpotifyManager()
 lyrics_manager = LyricsManager()
-animation_selector = AnimationSelector()
+ai_director = AIDirector()
 
 # Global state
 current_track_id = None
@@ -27,6 +27,7 @@ async def startup_event():
 
 async def spotify_polling_loop():
     global current_track_id, parsed_lyrics, last_lyric_time
+    last_playing_state = False
     
     while True:
         try:
@@ -34,33 +35,33 @@ async def spotify_polling_loop():
             if ws_manager.active_connections:
                 track_info = spotify_manager.get_track_info()
                 
-                if track_info and track_info['is_playing']:
-                    # If track changed, fetch new lyrics
-                    if track_info['id'] != current_track_id:
-                        print(f"New track detected: {track_info['name']} by {track_info['artist']}")
-                        current_track_id = track_info['id']
-                        parsed_lyrics = lyrics_manager.fetch_lyrics(
-                            track_info['name'], 
-                            track_info['artist'],
-                            track_info['album'],
-                            track_info['duration_ms']
-                        )
-                        last_lyric_time = -1
-                        print(f"Fetched {len(parsed_lyrics)} lyric lines")
-                    if current_track_id and not parsed_lyrics:
-                        # No lyrics found for the new track
-                        await ws_manager.broadcast({
-                            "time": -1,
-                            "current": "No lyrics found",
-                            "next": "",
-                            "animation": "fade",
-                            "progress": track_info['progress_ms'] / track_info['duration_ms'],
-                            "title": anyascii(track_info['name']),
-                            "artist": anyascii(track_info['artist']),
-                            "bpm": track_info.get('bpm', 120.0),
-                            "energy": track_info.get('energy', 0.5),
-                            "dur": 5000
-                        })
+                if track_info:
+                    current_playing_state = track_info['is_playing']
+                    state_changed = (current_playing_state != last_playing_state)
+                    last_playing_state = current_playing_state
+                    
+                    if current_playing_state:
+                        # If track changed, fetch new lyrics
+                        if track_info['id'] != current_track_id:
+                            print(f"New track detected: {track_info['name']} by {track_info['artist']}")
+                            current_track_id = track_info['id']
+                            parsed_lyrics = lyrics_manager.fetch_lyrics(
+                                track_info['name'], 
+                                track_info['artist'],
+                                track_info['album'],
+                                track_info['duration_ms']
+                            )
+                            last_lyric_time = -1
+                            print(f"Fetched {len(parsed_lyrics)} lyric lines")
+                        
+                        if current_track_id and not parsed_lyrics:
+                            # No lyrics found for the new track
+                            payload = ai_director.compose_packet(
+                                {"time": -1, "text": "No lyrics found"}, 
+                                None, 
+                                track_info
+                            )
+                            await ws_manager.broadcast(payload)
                     
                     # Sync logic
                     progress_seconds = track_info['progress_ms'] / 1000.0
@@ -73,29 +74,47 @@ async def spotify_polling_loop():
                     if current_lyric['time'] != last_lyric_time:
                         last_lyric_time = current_lyric['time']
                         
-                        animation = animation_selector.select_animation(current_lyric, next_lyric, track_info)
+                        payload = ai_director.compose_packet(current_lyric, next_lyric, track_info)
                         
-                        duration_ms = 5000
-                        if next_lyric:
-                            duration_ms = int((next_lyric['time'] - current_lyric['time']) * 1000)
-                            
-                        payload = {
-                            "time": current_lyric['time'],
-                            "current": current_lyric['text'],
-                            "next": next_lyric['text'] if next_lyric else "",
-                            "animation": animation,
-                            "progress": track_info['progress_ms'] / track_info['duration_ms'],
-                            "title": anyascii(track_info['name']),
-                            "artist": anyascii(track_info['artist']),
-                            "bpm": track_info.get('bpm', 120.0),
-                            "energy": track_info.get('energy', 0.5),
-                            "dur": duration_ms
-                        }
-                        
-                        print(f"Broadcasting: {payload['current']} [{animation}]")
+                        print(f"Broadcasting: {payload['lyric']} [{payload['animation']}]")
+                        await ws_manager.broadcast(payload)
+                    elif state_changed:
+                        # Playing state just resumed, send a trigger payload
+                        payload = ai_director.compose_packet(
+                            {"time": -1, "text": current_lyric['text']}, 
+                            next_lyric, 
+                            track_info
+                        )
                         await ws_manager.broadcast(payload)
                 else:
-                    print("Spotify not playing or no track info.")
+                    if state_changed:
+                        print("Spotify playback paused/stopped.")
+                        # Send a stop event to the client
+                        payload = {
+                            "time": -1,
+                            "lyric": "",
+                            "next": "",
+                            "animation": "fade",
+                            "progress": 0,
+                            "title": "",
+                            "artist": "",
+                            "bpm": 120.0,
+                            "energy": 0.5,
+                            "duration": 0,
+                            "is_playing": False,
+                            "beatStrength": 0.5,
+                            "bass": 0.5,
+                            "emotion": "Calm",
+                            "scene": "Verse",
+                            "secondary": "None",
+                            "font": "Medium",
+                            "x": 64,
+                            "y": 32,
+                            "shake": False,
+                            "invert": False,
+                            "particles": "None"
+                        }
+                        await ws_manager.broadcast(payload)
                         
         except Exception as e:
             print(f"Error in polling loop: {e}")

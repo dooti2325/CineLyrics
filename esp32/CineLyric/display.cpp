@@ -16,11 +16,6 @@ void displayClear() {
 }
 
 void displayUpdate() {
-    if (isDisplayInverted) {
-        u8g2.setDrawColor(2); // XOR mode
-        u8g2.drawBox(0, 0, 128, 64);
-        u8g2.setDrawColor(1); // Restore default
-    }
     u8g2.sendBuffer();
 }
 

@@ -64,7 +64,7 @@ class AIDirector:
         font = self.determine_font(current_lyric.get("text", ""))
         
         shake = (scene == "Chorus" and beat_data["beatStrength"] > 0.8)
-        invert = (emotion == "Angry" or emotion == "Fear")
+        invert = False
         
         particles = "None"
         if scene == "Chorus" and emotion in ["Happy", "Powerful"]:

@@ -56,7 +56,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             pkt.shake = doc["shake"] | false;
             bool invert = doc["invert"] | false;
             pkt.invert = invert;
-            isDisplayInverted = invert;
             
             strncpy(pkt.particles, doc["particles"] | "None", sizeof(pkt.particles) - 1); pkt.particles[sizeof(pkt.particles) - 1] = '\0';
             

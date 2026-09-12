@@ -73,8 +73,12 @@ void handleLongPress() {
 void setup() {
     Serial.begin(115200);
     
-    // Initialize Touch Sensor
+    // Initialize Touch Sensor / Button (ESP32-C3 uses digital modules or push buttons)
+#if TOUCH_ACTIVE_HIGH
     pinMode(TOUCH_PIN, INPUT);
+#else
+    pinMode(TOUCH_PIN, INPUT_PULLUP);
+#endif
     
     // Initialize Display
     displaySetup();
@@ -110,10 +114,12 @@ void loop() {
     // Handle WebSocket events
     websocketLoop();
     
-    // Handle Touch Sensor Toggle
-    // Using digitalRead for standard capacitive touch modules (like TTP223).
-    // If you are using a bare wire directly to an ESP32 touch pin, use: bool currentTouchState = (touchRead(TOUCH_PIN) < TOUCH_THRESHOLD);
+    // Handle Touch Sensor / Button Toggle
+#if TOUCH_ACTIVE_HIGH
     bool rawTouchState = (digitalRead(TOUCH_PIN) == HIGH); 
+#else
+    bool rawTouchState = (digitalRead(TOUCH_PIN) == LOW); 
+#endif 
     
     if (rawTouchState != lastDebouncedState) {
         lastDebounceTime = millis();

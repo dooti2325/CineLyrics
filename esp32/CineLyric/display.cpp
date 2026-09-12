@@ -1,10 +1,12 @@
 #include "display.h"
 #include "config.h"
+#include <Wire.h>
 
 // Initialize U8G2 object for SH1106 (Full frame buffer)
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, OLED_RST, OLED_SCL, OLED_SDA);
 
 void displaySetup() {
+    Wire.begin(OLED_SDA, OLED_SCL);
     u8g2.begin();
     u8g2.setContrast(255);
 }

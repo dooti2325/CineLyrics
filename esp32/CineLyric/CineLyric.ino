@@ -12,7 +12,6 @@ unsigned long lastFrameTime = 0;
 const int targetFPS = 30;
 const int frameDelay = 1000 / targetFPS;
 
-enum DisplayMode { MODE_LYRICS, MODE_VISUALS, MODE_FACE };
 DisplayMode currentMode = MODE_LYRICS;
 
 bool lastDebouncedState = false;

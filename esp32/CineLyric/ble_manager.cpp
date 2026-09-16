@@ -68,6 +68,9 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
             emotion.trim();
             Serial.printf("[BLE] Command: CUSTOM EMOTION '%s'\n", emotion.c_str());
 
+            currentMode = MODE_FACE;
+            isAsleep = false;
+
             if (emotion == "happy") playFaceAnimation(ANIM_HAPPY);
             else if (emotion == "laugh") playFaceAnimation(ANIM_LAUGH);
             else if (emotion == "sad") playFaceAnimation(ANIM_SAD);

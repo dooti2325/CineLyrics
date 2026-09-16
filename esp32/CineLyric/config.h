@@ -16,8 +16,13 @@ const char *const WEBSOCKET_PATH = "/ws";
 #define OLED_RST U8X8_PIN_NONE // Usually none for I2C
 
 // Touch Sensor Configuration
+// Touch Sensor Configuration
 #define TOUCH_PIN 4        // Change to the pin connected to your capacitive touch sensor (e.g., T0 is GPIO 4)
 #define TOUCH_THRESHOLD 40 // Adjust this if using internal touchRead. If using a digital module, this is ignored.
+
+// Display Modes
+enum DisplayMode { MODE_LYRICS, MODE_VISUALS, MODE_FACE };
+extern DisplayMode currentMode;
 
 // DeskBuddy BLE Configuration
 #define BLE_DEVICE_NAME "DeskBuddy-BLE"

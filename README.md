@@ -74,4 +74,16 @@ The backend connects to Spotify to track what you're currently playing, fetches 
 2. Power on the ESP32. It should connect to Wi-Fi and then the WebSocket server.
 3. Open Spotify on your phone or PC and start playing a song.
 4. The lyrics should appear on the OLED with animations!
-# CineLyrics
+
+## 4. DeskBuddy BLE
+
+DeskBuddy now broadcasts over Bluetooth Low Energy as `DeskBuddy-BLE`, offering 5 prioritized GATT services:
+
+- **STATUS**: Read & notify DeskBuddy battery, BLE connection state, and device state (`IDLE`, `ACTIVE`, `SLEEPING`).
+- **COMMAND**: Remote control to `wake`, `sleep`, or trigger custom emotion animations (`happy`, `sad`, `shock`, `love`, `laugh`, `vibe`, etc.).
+- **NOTIFICATION**: Receive incoming notifications (`app`, `title`, `message`, `timestamp`) and render an animated pop-up banner on the OLED with auto-dismiss.
+- **PHONE**: Phone battery percentage, charging state, and connection telemetry.
+- **MEDIA**: Remote media triggers (`play/pause`, `next`, `previous`).
+
+### Testing DeskBuddy BLE
+Open `tools/ble_test.html` directly in any Web-Bluetooth supported browser (Google Chrome or Microsoft Edge on PC/Mac/Android). Click **"Connect DeskBuddy"** to pair, view battery telemetry, send custom emotions, and test real-time notification popups.

@@ -6,6 +6,7 @@
 #include "websocket_client.h"
 #include "face.h"
 #include "visuals.h"
+#include "ble_manager.h"
 
 unsigned long lastFrameTime = 0;
 const int targetFPS = 30;
@@ -25,6 +26,10 @@ bool isLongPressHandled = false;
 bool isAsleep = false;
 
 void handleSingleTap() {
+    if (bleHasActiveNotification()) {
+        bleDismissNotification();
+        return;
+    }
     if (currentMode == MODE_LYRICS) {
         cycleAnimation();
     } else if (currentMode == MODE_VISUALS) {
@@ -100,6 +105,9 @@ void setup() {
     // Initialize WebSocket
     websocketSetup();
     
+    // Initialize DeskBuddy BLE
+    bleSetup();
+    
     // Initial state
     setupFace();
     AnimPacket initPkt = {"Waiting for", "Spotify...", "fade", "", "", 120.0, 0.5, 5000, 0.5, 0.5, "Calm", "Verse", "None", "Medium", 64, 32, false, false, "None"};
@@ -109,6 +117,21 @@ void setup() {
 void loop() {
     // Handle WebSocket events
     websocketLoop();
+    
+    // Handle DeskBuddy BLE events
+    bleLoop();
+
+    // Handle incoming BLE Media Actions
+    MediaAction mediaAction = bleConsumeMediaAction();
+    if (mediaAction != MEDIA_NONE) {
+        if (mediaAction == MEDIA_TOGGLE) {
+            Serial.println("[DeskBuddy] BLE Media Play/Pause triggered");
+        } else if (mediaAction == MEDIA_NEXT) {
+            Serial.println("[DeskBuddy] BLE Media Next triggered");
+        } else if (mediaAction == MEDIA_PREVIOUS) {
+            Serial.println("[DeskBuddy] BLE Media Previous triggered");
+        }
+    }
     
     // Handle Touch Sensor Toggle
     // Using digitalRead for standard capacitive touch modules (like TTP223).
@@ -164,7 +187,14 @@ void loop() {
     unsigned long currentMillis = millis();
     if (currentMillis - lastFrameTime >= frameDelay) {
         lastFrameTime = currentMillis;
-        if (currentMode == MODE_LYRICS) {
+
+        // Highest priority: Active notification popup
+        if (bleHasActiveNotification()) {
+            NotificationData notif = bleGetNotification();
+            displayClear();
+            drawNotificationPopup(notif.app.c_str(), notif.title.c_str(), notif.message.c_str());
+            displayUpdate();
+        } else if (currentMode == MODE_LYRICS) {
             updateAnimation();
         } else if (currentMode == MODE_VISUALS) {
             updateVisuals();

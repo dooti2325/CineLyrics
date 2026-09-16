@@ -5,6 +5,9 @@ from anyascii import anyascii
 class LyricsManager:
     def __init__(self):
         self.base_url = "https://lrclib.net/api"
+        self.headers = {
+            "User-Agent": "CineLyric/1.0 (https://github.com/dooti2325/CineLyrics)"
+        }
         
     def fetch_lyrics(self, track_name, artist_name, album_name=None, duration_ms=None):
         """Fetches synced lyrics from LRCLIB based on track info."""
@@ -18,25 +21,35 @@ class LyricsManager:
             params["duration"] = duration_ms // 1000
 
         try:
-            response = requests.get(f"{self.base_url}/get", params=params, timeout=5)
+            response = requests.get(f"{self.base_url}/get", params=params, headers=self.headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 synced_lyrics = data.get("syncedLyrics")
                 if synced_lyrics:
                     return self.parse_lrc(synced_lyrics)
                     
-            # Fallback: Try with just track and artist if album/duration caused a mismatch
+            # Fallback 1: Try with just track and artist if album/duration caused a mismatch
             if album_name or duration_ms:
                 fallback_params = {
                     "track_name": track_name,
                     "artist_name": artist_name
                 }
-                response = requests.get(f"{self.base_url}/get", params=fallback_params, timeout=5)
+                response = requests.get(f"{self.base_url}/get", params=fallback_params, headers=self.headers, timeout=10)
                 if response.status_code == 200:
                     data = response.json()
                     synced_lyrics = data.get("syncedLyrics")
                     if synced_lyrics:
                         return self.parse_lrc(synced_lyrics)
+
+            # Fallback 2: Search endpoint
+            search_params = {"q": f"{track_name} {artist_name}"}
+            response = requests.get(f"{self.base_url}/search", params=search_params, headers=self.headers, timeout=10)
+            if response.status_code == 200:
+                results = response.json()
+                if results and isinstance(results, list):
+                    for item in results:
+                        if item.get("syncedLyrics"):
+                            return self.parse_lrc(item["syncedLyrics"])
                         
         except Exception as e:
             print(f"Error fetching lyrics from LRCLIB: {e}")

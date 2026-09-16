@@ -151,3 +151,63 @@ void drawText(const char* text, int x, int y, const uint8_t* font) {
     u8g2.setFont(font);
     u8g2.drawUTF8(x, y, text);
 }
+
+void drawNotificationPopup(const char* app, const char* title, const char* message) {
+    // Outer rounded card frame
+    u8g2.drawRFrame(0, 0, 128, 64, 4);
+
+    // Title banner at the top
+    u8g2.drawBox(0, 0, 128, 14);
+    u8g2.setDrawColor(0); // Inverted text on top bar
+    u8g2.setFont(u8g2_font_6x12_tf);
+    
+    char header[32];
+    if (app && strlen(app) > 0) {
+        snprintf(header, sizeof(header), "[%s]", app);
+    } else {
+        snprintf(header, sizeof(header), "[NOTIFICATION]");
+    }
+    u8g2.drawUTF8(6, 11, header);
+    u8g2.setDrawColor(1); // Restore draw color
+
+    // Title / Sender (bold)
+    if (title && strlen(title) > 0) {
+        u8g2.setFont(u8g2_font_helvB08_tr);
+        int w = u8g2.getUTF8Width(title);
+        if (w > 116) {
+            drawScrollingText(title, 27, u8g2_font_helvB08_tr);
+        } else {
+            u8g2.drawUTF8(6, 27, title);
+        }
+    }
+
+    // Message Body
+    if (message && strlen(message) > 0) {
+        drawWrappedText(message, 45, 116, u8g2_font_6x12_tf);
+    }
+}
+
+void drawPhoneBadge(uint8_t battery, bool isCharging) {
+    // Mini battery widget at top right (x=108, y=2)
+    int bx = 108;
+    int by = 2;
+    int bw = 16;
+    int bh = 8;
+    
+    // Battery outline + terminal
+    u8g2.drawFrame(bx, by, bw, bh);
+    u8g2.drawBox(bx + bw, by + 2, 2, 4);
+    
+    // Filled level based on percentage (clamp 0-100)
+    int fillW = map(constrain(battery, 0, 100), 0, 100, 0, bw - 2);
+    if (fillW > 0) {
+        u8g2.drawBox(bx + 1, by + 1, fillW, bh - 2);
+    }
+    
+    // If charging, draw small '+' or inverted mark
+    if (isCharging) {
+        u8g2.setFont(u8g2_font_4x6_tr);
+        u8g2.drawGlyph(bx - 6, by + 7, '+');
+    }
+}
+

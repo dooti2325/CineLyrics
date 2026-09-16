@@ -17,4 +17,8 @@ void drawTitleArtist(const char* title, const char* artist);
 void drawCenteredText(const char* text, int y, const uint8_t* font);
 void drawText(const char* text, int x, int y, const uint8_t* font);
 
+// DeskBuddy BLE UI Components
+void drawNotificationPopup(const char* app, const char* title, const char* message);
+void drawPhoneBadge(uint8_t battery, bool isCharging);
+
 #endif // DISPLAY_H

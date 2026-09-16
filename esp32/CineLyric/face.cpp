@@ -29,19 +29,19 @@ bool isBlinking = false;
 unsigned long blinkStartTime = 0;
 float currentBlinkDuration = 150.0;
 
-const float defaultY = 32.0;
-const float defaultLeftX = 36.0;  // Spaced out for 128px width
-const float defaultRightX = 92.0;
-const float defaultW = 48.0;      // Much wider for 1.3" display
-const float defaultH = 50.0;      // Much taller
-const float defaultR = 10.0;      // Scaled up corners
+const float defaultY = 26.0;
+const float defaultLeftX = 40.0;
+const float defaultRightX = 88.0;
+const float defaultW = 34.0;
+const float defaultH = 34.0;
+const float defaultR = 12.0;
 
 void setDefault(EyeParams& e, float x) {
     e.x = x; e.y = defaultY;
     e.w = defaultW; e.h = defaultH; e.radius = defaultR;
     e.topAngle = 0; e.bottomAngle = 0;
     e.pupilX = 0; e.pupilY = 0; 
-    e.pupilSize = 16.0; // Massive lens scaled for 1.3" display
+    e.pupilSize = 10.0; // Scaled cartoon pupil
 }
 
 void triggerBlink(float duration) {
@@ -425,17 +425,208 @@ void drawEyeShape(EyeParams& eye, float blinkAmt, float breathScale, float vibeY
     }
     
     u8g2.setDrawColor(1);
+    // Draw white sclera
     u8g2.drawRBox(eye.x - drawW/2.0, drawY - drawH/2.0, drawW, drawH, eye.radius);
     
+    // Draw pupil & cute cartoon catchlight highlight
     if (eye.pupilSize > 0.1 && blinkAmt < 0.5) {
         u8g2.setDrawColor(0);
-        u8g2.drawDisc(eye.x + eye.pupilX, drawY + eye.pupilY, eye.pupilSize);
+        float pX = eye.x + eye.pupilX;
+        float pY = drawY + eye.pupilY;
+        u8g2.drawDisc(pX, pY, eye.pupilSize);
+        
+        // Specular catchlight sparkle (Disney/Pixar style highlight)
         u8g2.setDrawColor(1);
+        u8g2.drawDisc(pX - eye.pupilSize * 0.35, pY - eye.pupilSize * 0.35, max(1.5f, eye.pupilSize * 0.30f));
+        u8g2.drawPixel(pX + eye.pupilSize * 0.3, pY + eye.pupilSize * 0.3);
     }
     
     if (blinkAmt < 0.8) {
         drawMask(eye.x, drawY, drawW, drawH, eye.topAngle, true);
         drawMask(eye.x, drawY, drawW, drawH, eye.bottomAngle, false);
+    }
+}
+
+void drawEyebrow(float x, float y, float w, float angle, float arch) {
+    u8g2.setDrawColor(1);
+    float rad = angle * PI / 180.0;
+    int halfW = (int)(w / 2.0);
+    
+    for (int i = -halfW; i <= halfW; i++) {
+        float norm = (float)i / (float)halfW;
+        float curveY = -(1.0f - norm * norm) * arch + i * tan(rad);
+        int px = (int)(x + i);
+        int py = (int)(y + curveY);
+        u8g2.drawPixel(px, py);
+        u8g2.drawPixel(px, py - 1);
+        if (abs(norm) < 0.6f) {
+            u8g2.drawPixel(px, py - 2); // Thicker center arch
+        }
+    }
+}
+
+void drawCartoonEyebrows(FaceAnim anim, float vibeYOffset, unsigned long currentMillis) {
+    float leftY = cLeft.y - (cLeft.h / 2.0) - 4.0 + vibeYOffset;
+    float rightY = cRight.y - (cRight.h / 2.0) - 4.0 + vibeYOffset;
+
+    switch (anim) {
+        case ANIM_HAPPY:
+        case ANIM_LAUGH:
+            drawEyebrow(cLeft.x, leftY - 4, 22, -6, 5);
+            drawEyebrow(cRight.x, rightY - 4, 22, 6, 5);
+            break;
+        case ANIM_SAD:
+            // Tilted inward and up / \
+            drawEyebrow(cLeft.x, leftY - 2, 20, 22, 1);
+            drawEyebrow(cRight.x, rightY - 2, 20, -22, 1);
+            break;
+        case ANIM_ANGRY:
+            // Fierce V-brow \ /
+            drawEyebrow(cLeft.x, leftY + 1, 24, -26, 1);
+            drawEyebrow(cRight.x, rightY + 1, 24, 26, 1);
+            break;
+        case ANIM_CURIOUS:
+            // Asymmetrical: Left high arch, Right flat
+            drawEyebrow(cLeft.x, leftY - 7, 22, -8, 6);
+            drawEyebrow(cRight.x, rightY, 20, 4, 1);
+            break;
+        case ANIM_SHOCK:
+            // High floating arches
+            drawEyebrow(cLeft.x, leftY - 7, 24, 0, 6);
+            drawEyebrow(cRight.x, rightY - 7, 24, 0, 6);
+            break;
+        case ANIM_THINKING:
+            drawEyebrow(cLeft.x, leftY - 1, 20, 12, 1);
+            drawEyebrow(cRight.x, rightY - 6, 24, -12, 5);
+            break;
+        case ANIM_LOVE:
+            drawEyebrow(cLeft.x, leftY - 4, 22, -4, 4);
+            drawEyebrow(cRight.x, rightY - 4, 22, 4, 4);
+            break;
+        case ANIM_VIBE: {
+            float tilt = sin(currentMillis / 180.0) * 12.0;
+            drawEyebrow(cLeft.x, leftY - 3, 22, tilt, 4);
+            drawEyebrow(cRight.x, rightY - 3, 22, tilt, 4);
+            break;
+        }
+        case ANIM_SLEEP:
+            drawEyebrow(cLeft.x, leftY - 1, 20, 0, 2);
+            drawEyebrow(cRight.x, rightY - 1, 20, 0, 2);
+            break;
+        case ANIM_IDLE:
+        default:
+            drawEyebrow(cLeft.x, leftY - 2, 22, -2, 3);
+            drawEyebrow(cRight.x, rightY - 2, 22, 2, 3);
+            break;
+    }
+}
+
+void drawCartoonMouth(FaceAnim anim, float breathScale, float vibeYOffset, unsigned long currentMillis) {
+    u8g2.setDrawColor(1);
+    int cx = 64;
+    int cy = (int)(51 + vibeYOffset * 0.5f);
+
+    switch (anim) {
+        case ANIM_HAPPY: {
+            // Open smiling mouth with tongue
+            u8g2.drawRBox(cx - 10, cy - 2, 20, 8, 3);
+            u8g2.setDrawColor(0);
+            u8g2.drawDisc(cx, cy + 5, 4); // Tongue indentation
+            u8g2.setDrawColor(1);
+            break;
+        }
+        case ANIM_LAUGH: {
+            // Big open laughing mouth with white teeth & tongue
+            u8g2.drawRBox(cx - 14, cy - 4, 28, 12, 4);
+            u8g2.setDrawColor(0);
+            u8g2.drawHLine(cx - 13, cy + 1, 26); // Teeth separator
+            u8g2.drawVLine(cx - 7, cy - 3, 4);
+            u8g2.drawVLine(cx, cy - 3, 4);
+            u8g2.drawVLine(cx + 7, cy - 3, 4);
+            u8g2.drawDisc(cx, cy + 6, 4); // Tongue
+            u8g2.setDrawColor(1);
+            break;
+        }
+        case ANIM_SHOCK: {
+            // Classic open cartoon 'O' mouth
+            u8g2.drawDisc(cx, cy + 1, 6);
+            u8g2.setDrawColor(0);
+            u8g2.drawDisc(cx, cy + 1, 4);
+            u8g2.setDrawColor(1);
+            break;
+        }
+        case ANIM_SAD: {
+            // Downward frown with teardrops
+            u8g2.drawLine(cx - 8, cy + 3, cx, cy - 1);
+            u8g2.drawLine(cx, cy - 1, cx + 8, cy + 3);
+            u8g2.drawLine(cx - 8, cy + 4, cx, cy);
+            u8g2.drawLine(cx, cy, cx + 8, cy + 4);
+
+            // Teardrops streaming down cheeks
+            int tearY1 = 36 + ((currentMillis / 35) % 22);
+            int tearY2 = 36 + (((currentMillis + 250) / 35) % 22);
+            u8g2.drawDisc(35, tearY1, 2);
+            u8g2.drawDisc(93, tearY2, 2);
+            break;
+        }
+        case ANIM_LOVE: {
+            // Warm smile with blushing cheeks
+            u8g2.drawRBox(cx - 9, cy - 2, 18, 7, 3);
+            // Blushing marks /// on cheeks
+            u8g2.drawLine(18, 38, 22, 32); u8g2.drawLine(23, 38, 27, 32);
+            u8g2.drawLine(101, 38, 105, 32); u8g2.drawLine(106, 38, 110, 32);
+            break;
+        }
+        case ANIM_ANGRY: {
+            // Clenched teeth rectangular grimace
+            u8g2.drawFrame(cx - 12, cy - 3, 24, 8);
+            u8g2.drawHLine(cx - 12, cy + 1, 24);
+            for (int x = cx - 8; x < cx + 12; x += 4) {
+                u8g2.drawVLine(x, cy - 3, 8);
+            }
+            break;
+        }
+        case ANIM_CURIOUS: {
+            // Lopsided smirk hooked up on right
+            u8g2.drawLine(cx - 7, cy + 2, cx + 2, cy + 1);
+            u8g2.drawLine(cx + 2, cy + 1, cx + 9, cy - 3);
+            u8g2.drawLine(cx + 8, cy - 4, cx + 10, cy - 2);
+            break;
+        }
+        case ANIM_THINKING: {
+            // Pursed wavy mouth
+            u8g2.drawLine(cx - 6, cy, cx - 2, cy + 2);
+            u8g2.drawLine(cx - 2, cy + 2, cx + 2, cy - 1);
+            u8g2.drawLine(cx + 2, cy - 1, cx + 6, cy + 1);
+            break;
+        }
+        case ANIM_VIBE: {
+            // Whistling / singing mouth pulsing to music beat
+            float r = 3.5f + sin(currentMillis / 100.0f) * 1.5f;
+            u8g2.drawDisc(cx, cy, (int)r);
+            u8g2.setDrawColor(0);
+            u8g2.drawDisc(cx, cy, max(1, (int)(r - 2.0f)));
+            u8g2.setDrawColor(1);
+            break;
+        }
+        case ANIM_SLEEP: {
+            // Small peaceful line and floating Z letters
+            u8g2.drawHLine(cx - 5, cy, 10);
+            int z1Y = 24 - ((currentMillis / 55) % 24);
+            int z2Y = 32 - (((currentMillis + 400) / 55) % 24);
+            u8g2.setFont(u8g2_font_5x8_tr);
+            u8g2.drawStr(108, z1Y, "Z");
+            u8g2.drawStr(116, z2Y, "z");
+            break;
+        }
+        case ANIM_IDLE:
+        default: {
+            // Warm smiling line
+            u8g2.drawPixel(cx - 8, cy - 1);
+            u8g2.drawHLine(cx - 7, cy, 14);
+            u8g2.drawPixel(cx + 7, cy - 1);
+            break;
+        }
     }
 }
 
@@ -474,9 +665,9 @@ void updateFace() {
             
             stepStartTime = currentMillis;
             stepDuration = 300;
-            isSequencePlaying = true; // Hijack sequencer for 1 step
+            isSequencePlaying = true;
             currentAnim = ANIM_IDLE;
-            animStep = 0; // will trigger completion in executeStep
+            animStep = 0;
             
             nextMicroMoveTime = currentMillis + random(1500, 4000);
         }
@@ -497,13 +688,10 @@ void updateFace() {
             isBlinking = false;
             blinkFactor = 0.0;
         } else {
-            // Refined blink physics using cubic easing for perfectly fluid motion
             if (t < 0.3) {
-                // Close very fast, with easing
                 float normT = t / 0.3;
                 blinkFactor = easeInOutCubic(normT);
             } else {
-                // Open slightly slower, with easing
                 float normT = (t - 0.3) / 0.7;
                 blinkFactor = 1.0 - easeInOutCubic(normT);
             }
@@ -518,18 +706,20 @@ void updateFace() {
         float beatMs = 60000.0 / currentMusicBPM;
         if (beatMs > 0) {
             float phase = (fmod(currentMillis, beatMs) / beatMs) * PI * 2.0;
-            vibeYOffset = sin(phase) * -5.0; // Bounce up and down
-            breathScale = 1.0 + (sin(phase) * 0.05); // Pulsate with the beat
+            vibeYOffset = sin(phase) * -4.0; // Bounce with the beat
+            breathScale = 1.0 + (sin(phase) * 0.04);
         }
     } else {
-        breathScale = 1.0 + (sin(currentMillis / 500.0) * 0.05);
+        breathScale = 1.0 + (sin(currentMillis / 500.0) * 0.04);
         if (currentAnim == ANIM_SLEEP) {
-            breathScale = 1.0 + (sin(currentMillis / 800.0) * 0.1);
+            breathScale = 1.0 + (sin(currentMillis / 800.0) * 0.08);
         }
     }
 
     displayClear();
     drawEyeShape(cLeft, blinkFactor, breathScale, vibeYOffset);
     drawEyeShape(cRight, blinkFactor, breathScale, vibeYOffset);
+    drawCartoonEyebrows(currentAnim, vibeYOffset, currentMillis);
+    drawCartoonMouth(currentAnim, breathScale, vibeYOffset, currentMillis);
     displayUpdate();
 }

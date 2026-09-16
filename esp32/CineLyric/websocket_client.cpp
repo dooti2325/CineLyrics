@@ -22,8 +22,8 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         {
             Serial.printf("[WSc] get text: %s\n", payload);
             
-            // Parse JSON
-            StaticJsonDocument<512> doc;
+            // Parse JSON with adequate buffer size
+            StaticJsonDocument<1024> doc;
             DeserializationError error = deserializeJson(doc, payload);
             
             if (error) {
@@ -38,6 +38,14 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             strncpy(pkt.animType, doc["animation"] | "fade", sizeof(pkt.animType) - 1); pkt.animType[sizeof(pkt.animType) - 1] = '\0';
             strncpy(pkt.title, doc["title"] | "", sizeof(pkt.title) - 1); pkt.title[sizeof(pkt.title) - 1] = '\0';
             strncpy(pkt.artist, doc["artist"] | "", sizeof(pkt.artist) - 1); pkt.artist[sizeof(pkt.artist) - 1] = '\0';
+            
+            // Fallback: If lyric is empty but title is present, display song title & artist!
+            if (strlen(pkt.lyric) == 0 && strlen(pkt.title) > 0) {
+                strncpy(pkt.lyric, pkt.title, sizeof(pkt.lyric) - 1);
+                pkt.lyric[sizeof(pkt.lyric) - 1] = '\0';
+                strncpy(pkt.nextLyric, pkt.artist, sizeof(pkt.nextLyric) - 1);
+                pkt.nextLyric[sizeof(pkt.nextLyric) - 1] = '\0';
+            }
             
             pkt.bpm = doc["bpm"] | 120.0;
             pkt.energy = doc["energy"] | 0.5;

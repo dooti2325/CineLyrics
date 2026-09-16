@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeskBuddy BLE Controller</title>
+    <style>
+        :root {
+            --bg-base: #0c0f17;
+            --bg-card: rgba(22, 28, 45, 0.7);
+            --bg-card-hover: rgba(30, 38, 60, 0.85);
+            --border-card: rgba(255, 255, 255, 0.08);
+            --accent-primary: #38bdf8;
+            --accent-secondary: #818cf8;
+            --accent-success: #34d399;
+            --accent-warning: #fbbf24;
+            --accent-danger: #f87171;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            background: radial-gradient(circle at top, #1e1b4b 0%, var(--bg-base) 60%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 18px 24px;
+        }
+
+        .logo-group h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-group p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-card);
+            color: var(--text-main);
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 6px 16px rgba(56, 189, 248, 0.4);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: var(--accent-danger);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .status-dot.connected {
+            background: var(--accent-success);
+            box-shadow: 0 0 8px var(--accent-success);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 10px;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        input[type="text"], select {
+            background: rgba(10, 14, 26, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 9px 12px;
+            color: var(--text-main);
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus, select:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .chip-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .btn-chip {
+            padding: 8px 6px;
+            font-size: 0.8rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s ease;
+        }
+
+        .btn-chip:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        .log-console {
+            background: #07090e;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.78rem;
+            height: 140px;
+            overflow-y: auto;
+            color: #38bdf8;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+        }
+        .log-entry.error { color: #f87171; }
+        .log-entry.success { color: #34d399; }
+        .log-entry.info { color: #94a3b8; }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-row input[type="range"] {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="logo-group">
+            <h1>DeskBuddy BLE Controller</h1>
+            <p>Direct Web Bluetooth interface for DeskBuddy ESP32</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="status-badge" id="badgeConn">
+                <div class="status-dot" id="dotConn"></div>
+                <span id="labelConn">Disconnected</span>
+            </div>
+            <button class="btn btn-primary" id="btnConnect">Connect DeskBuddy</button>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- STATUS CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">1. Device Status</div>
+                <button class="btn" style="padding: 4px 10px; font-size: 0.75rem;" id="btnRefreshStatus" disabled>Refresh</button>
+            </div>
+            <div style="display: flex; justify-content: space-around; padding: 10px 0;">
+                <div style="text-align: center;">
+                    <div style="font-size: 1.8rem; font-weight: 700; color: var(--accent-success);" id="valBuddyBatt">--%</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">DeskBuddy Battery</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--accent-primary); margin-top: 4px;" id="valDeviceState">IDLE</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Current State</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COMMAND CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">2. Commands & Emotions</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn" style="flex: 1;" id="btnWake" disabled>☀️ Wake</button>
+                <button class="btn" style="flex: 1;" id="btnSleep" disabled>🌙 Sleep</button>
+            </div>
+            <label>Trigger Facial Expression:</label>
+            <div class="chip-grid">
+                <button class="btn-chip" data-emotion="happy" disabled>😄 Happy</button>
+                <button class="btn-chip" data-emotion="laugh" disabled>😆 Laugh</button>
+                <button class="btn-chip" data-emotion="love" disabled>❤️ Love</button>
+                <button class="btn-chip" data-emotion="shock" disabled>😲 Shock</button>
+                <button class="btn-chip" data-emotion="curious" disabled>🧐 Curious</button>
+                <button class="btn-chip" data-emotion="sad" disabled>😢 Sad</button>
+                <button class="btn-chip" data-emotion="angry" disabled>😠 Angry</button>
+                <button class="btn-chip" data-emotion="thinking" disabled>🤔 Thinking</button>
+                <button class="btn-chip" data-emotion="vibe" disabled>🎵 Vibe</button>
+            </div>
+        </div>
+
+        <!-- NOTIFICATION CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">3. Send Notification</div>
+            </div>
+            <div class="form-group">
+                <label>Application</label>
+                <select id="notifApp" disabled>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Slack">Slack</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Messages">Messages</option>
+                    <option value="Calendar">Calendar</option>
+                    <option value="Gmail">Gmail</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Sender / Title</label>
+                <input type="text" id="notifTitle" value="Alex Smith" placeholder="e.g. Boss" disabled>
+            </div>
+            <div class="form-group">
+                <label>Message Preview</label>
+                <input type="text" id="notifMsg" value="Meeting in 10 minutes!" placeholder="Body text" disabled>
+            </div>
+            <button class="btn btn-primary" id="btnSendNotif" disabled>Send to OLED Banner</button>
+        </div>
+
+        <!-- PHONE TELEMETRY CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">4. Phone Status Telemetry</div>
+            </div>
+            <div class="form-group">
+                <label>Phone Battery Percentage: <span id="labelPhoneBatt">85%</span></label>
+                <div class="slider-row">
+                    <input type="range" id="sliderPhoneBatt" min="1" max="100" value="85" disabled>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin: 6px 0;">
+                <input type="checkbox" id="chkCharging" disabled>
+                <label for="chkCharging" style="cursor: pointer; color: var(--text-main);">Currently Charging ⚡</label>
+            </div>
+            <button class="btn" id="btnSendPhone" disabled>Sync Phone Telemetry</button>
+        </div>
+
+        <!-- MEDIA CONTROLS CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">5. Media Playback Controls</div>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: center; padding: 12px 0;">
+                <button class="btn" id="btnMediaPrev" disabled>⏮ Previous</button>
+                <button class="btn btn-primary" id="btnMediaToggle" disabled>⏯ Play / Pause</button>
+                <button class="btn" id="btnMediaNext" disabled>⏭ Next</button>
+            </div>
+        </div>
+
+        <!-- LOG CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Activity Console</div>
+                <button class="btn" style="padding: 2px 8px; font-size: 0.7rem;" id="btnClearLog">Clear</button>
+            </div>
+            <div class="log-console" id="logConsole">
+                <div class="log-entry info">[Ready] Click "Connect DeskBuddy" to pair over BLE.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // UUID Constants matching config.h
+    const UUIDS = {
+        SERVICE_STATUS:        "4f711000-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_BUDDY_BATTERY:    "4f711001-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_BLE_CONN:         "4f711002-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_DEVICE_STATUS:    "4f711003-2a91-4c10-9b8c-b03a1a1f0001",
+
+        SERVICE_NOTIFICATION:  "4f712000-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_NOTIF_APP:        "4f712001-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_NOTIF_TITLE:      "4f712002-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_NOTIF_MSG:        "4f712003-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_NOTIF_TIME:       "4f712004-2a91-4c10-9b8c-b03a1a1f0001",
+
+        SERVICE_PHONE:         "4f713000-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_PHONE_BATTERY:    "4f713001-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_PHONE_CHARGING:   "4f713002-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_PHONE_CONN:       "4f713003-2a91-4c10-9b8c-b03a1a1f0001",
+
+        SERVICE_MEDIA:         "4f714000-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_MEDIA_PLAYPAUSE:  "4f714001-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_MEDIA_NEXT:       "4f714002-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_MEDIA_PREV:       "4f714003-2a91-4c10-9b8c-b03a1a1f0001",
+
+        SERVICE_COMMAND:       "4f715000-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_CMD_WAKE:         "4f715001-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_CMD_SLEEP:        "4f715002-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_CMD_CUSTOM:       "4f715003-2a91-4c10-9b8c-b03a1a1f0001"
+    };
+
+    let bluetoothDevice = null;
+    let gattServer = null;
+    let characteristics = {};
+
+    const logConsole = document.getElementById("logConsole");
+    function log(msg, type = "info") {
+        const div = document.createElement("div");
+        div.className = `log-entry ${type}`;
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logConsole.appendChild(div);
+        logConsole.scrollTop = logConsole.scrollHeight;
+    }
+
+    document.getElementById("btnClearLog").onclick = () => logConsole.innerHTML = "";
+
+    const btnConnect = document.getElementById("btnConnect");
+    const dotConn = document.getElementById("dotConn");
+    const labelConn = document.getElementById("labelConn");
+
+    function setConnectedUI(connected) {
+        dotConn.className = connected ? "status-dot connected" : "status-dot";
+        labelConn.textContent = connected ? "Connected" : "Disconnected";
+        btnConnect.textContent = connected ? "Disconnect" : "Connect DeskBuddy";
+        btnConnect.className = connected ? "btn btn-danger" : "btn btn-primary";
+
+        document.querySelectorAll("button, input, select").forEach(el => {
+            if (el !== btnConnect && el.id !== "btnClearLog") {
+                el.disabled = !connected;
+            }
+        });
+    }
+
+    btnConnect.addEventListener("click", async () => {
+        if (gattServer && gattServer.connected) {
+            bluetoothDevice.gatt.disconnect();
+            return;
+        }
+
+        try {
+            log("Requesting DeskBuddy BLE device...", "info");
+            bluetoothDevice = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'DeskBuddy-BLE' }],
+                optionalServices: [
+                    UUIDS.SERVICE_STATUS,
+                    UUIDS.SERVICE_NOTIFICATION,
+                    UUIDS.SERVICE_PHONE,
+                    UUIDS.SERVICE_MEDIA,
+                    UUIDS.SERVICE_COMMAND
+                ]
+            });
+
+            bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+            log("Connecting to GATT Server...", "info");
+            gattServer = await bluetoothDevice.gatt.connect();
+            setConnectedUI(true);
+            log("Connected to DeskBuddy BLE!", "success");
+
+            // Cache services & characteristics
+            await discoverCharacteristics();
+            await readStatus();
+        } catch (err) {
+            log(`Connection error: ${err.message}`, "error");
+            setConnectedUI(false);
+        }
+    });
+
+    function onDisconnected() {
+        log("DeskBuddy BLE Disconnected", "info");
+        setConnectedUI(false);
+        characteristics = {};
+    }
+
+    async function discoverCharacteristics() {
+        try {
+            const statusService = await gattServer.getPrimaryService(UUIDS.SERVICE_STATUS);
+            characteristics.buddyBatt = await statusService.getCharacteristic(UUIDS.CHAR_BUDDY_BATTERY);
+            characteristics.deviceStatus = await statusService.getCharacteristic(UUIDS.CHAR_DEVICE_STATUS);
+
+            const notifService = await gattServer.getPrimaryService(UUIDS.SERVICE_NOTIFICATION);
+            characteristics.notifApp = await notifService.getCharacteristic(UUIDS.CHAR_NOTIF_APP);
+            characteristics.notifTitle = await notifService.getCharacteristic(UUIDS.CHAR_NOTIF_TITLE);
+            characteristics.notifMsg = await notifService.getCharacteristic(UUIDS.CHAR_NOTIF_MSG);
+            characteristics.notifTime = await notifService.getCharacteristic(UUIDS.CHAR_NOTIF_TIME);
+
+            const phoneService = await gattServer.getPrimaryService(UUIDS.SERVICE_PHONE);
+            characteristics.phoneBatt = await phoneService.getCharacteristic(UUIDS.CHAR_PHONE_BATTERY);
+            characteristics.phoneCharging = await phoneService.getCharacteristic(UUIDS.CHAR_PHONE_CHARGING);
+
+            const mediaService = await gattServer.getPrimaryService(UUIDS.SERVICE_MEDIA);
+            characteristics.mediaPlay = await mediaService.getCharacteristic(UUIDS.CHAR_MEDIA_PLAYPAUSE);
+            characteristics.mediaNext = await mediaService.getCharacteristic(UUIDS.CHAR_MEDIA_NEXT);
+            characteristics.mediaPrev = await mediaService.getCharacteristic(UUIDS.CHAR_MEDIA_PREV);
+
+            const cmdService = await gattServer.getPrimaryService(UUIDS.SERVICE_COMMAND);
+            characteristics.cmdWake = await cmdService.getCharacteristic(UUIDS.CHAR_CMD_WAKE);
+            characteristics.cmdSleep = await cmdService.getCharacteristic(UUIDS.CHAR_CMD_SLEEP);
+            characteristics.cmdCustom = await cmdService.getCharacteristic(UUIDS.CHAR_CMD_CUSTOM);
+
+            log("All DeskBuddy GATT characteristics mapped!", "success");
+        } catch (err) {
+            log(`Error discovering characteristics: ${err.message}`, "error");
+        }
+    }
+
+    async function readStatus() {
+        if (!characteristics.buddyBatt) return;
+        try {
+            const val = await characteristics.buddyBatt.readValue();
+            const percent = val.getUint8(0);
+            document.getElementById("valBuddyBatt").textContent = `${percent}%`;
+
+            const statVal = await characteristics.deviceStatus.readValue();
+            const decoder = new TextDecoder('utf-8');
+            const statusStr = decoder.decode(statVal);
+            document.getElementById("valDeviceState").textContent = statusStr || "IDLE";
+        } catch (err) {
+            log(`Error reading status: ${err.message}`, "error");
+        }
+    }
+
+    document.getElementById("btnRefreshStatus").onclick = readStatus;
+
+    // Commands
+    document.getElementById("btnWake").onclick = async () => {
+        try {
+            await characteristics.cmdWake.writeValue(new Uint8Array([1]));
+            document.getElementById("valDeviceState").textContent = "ACTIVE";
+            log("Command sent: WAKE", "success");
+        } catch(e) { log(e.message, "error"); }
+    };
+
+    document.getElementById("btnSleep").onclick = async () => {
+        try {
+            await characteristics.cmdSleep.writeValue(new Uint8Array([1]));
+            document.getElementById("valDeviceState").textContent = "SLEEPING";
+            log("Command sent: SLEEP", "success");
+        } catch(e) { log(e.message, "error"); }
+    };
+
+    // Emotion chips
+    document.querySelectorAll(".btn-chip").forEach(chip => {
+        chip.addEventListener("click", async () => {
+            const emotion = chip.getAttribute("data-emotion");
+            try {
+                const encoder = new TextEncoder();
+                await characteristics.cmdCustom.writeValue(encoder.encode(emotion));
+                log(`Custom emotion sent: ${emotion}`, "success");
+            } catch(e) { log(e.message, "error"); }
+        });
+    });
+
+    // Notifications
+    document.getElementById("btnSendNotif").onclick = async () => {
+        try {
+            const encoder = new TextEncoder();
+            const app = document.getElementById("notifApp").value;
+            const title = document.getElementById("notifTitle").value;
+            const msg = document.getElementById("notifMsg").value;
+
+            await characteristics.notifApp.writeValue(encoder.encode(app));
+            await characteristics.notifTitle.writeValue(encoder.encode(title));
+            await characteristics.notifMsg.writeValue(encoder.encode(msg));
+            await characteristics.notifTime.writeValue(encoder.encode(new Date().toLocaleTimeString()));
+
+            log(`Notification dispatched: [${app}] ${title}: ${msg}`, "success");
+        } catch(e) { log(e.message, "error"); }
+    };
+
+    // Phone Telemetry
+    const sliderPhoneBatt = document.getElementById("sliderPhoneBatt");
+    const labelPhoneBatt = document.getElementById("labelPhoneBatt");
+    sliderPhoneBatt.oninput = () => labelPhoneBatt.textContent = `${sliderPhoneBatt.value}%`;
+
+    document.getElementById("btnSendPhone").onclick = async () => {
+        try {
+            const battVal = parseInt(sliderPhoneBatt.value);
+            const isCharging = document.getElementById("chkCharging").checked ? 1 : 0;
+
+            await characteristics.phoneBatt.writeValue(new Uint8Array([battVal]));
+            await characteristics.phoneCharging.writeValue(new Uint8Array([isCharging]));
+
+            log(`Phone telemetry updated: ${battVal}%, Charging: ${isCharging === 1}`, "success");
+        } catch(e) { log(e.message, "error"); }
+    };
+
+    // Media
+    document.getElementById("btnMediaToggle").onclick = async () => {
+        try {
+            await characteristics.mediaPlay.writeValue(new Uint8Array([1]));
+            log("Media: Play/Pause toggled", "info");
+        } catch(e) { log(e.message, "error"); }
+    };
+    document.getElementById("btnMediaNext").onclick = async () => {
+        try {
+            await characteristics.mediaNext.writeValue(new Uint8Array([1]));
+            log("Media: Next track", "info");
+        } catch(e) { log(e.message, "error"); }
+    };
+    document.getElementById("btnMediaPrev").onclick = async () => {
+        try {
+            await characteristics.mediaPrev.writeValue(new Uint8Array([1]));
+            log("Media: Previous track", "info");
+        } catch(e) { log(e.message, "error"); }
+    };
+</script>
+
+</body>
+</html>

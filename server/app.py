@@ -1,7 +1,8 @@
 import asyncio
 import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+import os
 from anyascii import anyascii
 
 from spotify import SpotifyManager
@@ -158,3 +159,15 @@ async def get():
         </html>
         """
     )
+
+@app.get("/ble")
+async def get_ble():
+    current_dir = os.path.dirname(__file__)
+    for candidate in [
+        os.path.join(current_dir, "ble_test.html"),
+        os.path.join(current_dir, "..", "tools", "ble_test.html")
+    ]:
+        if os.path.exists(candidate):
+            return FileResponse(os.path.abspath(candidate), media_type="text/html")
+    return HTMLResponse("<h3>ble_test.html not found</h3>", status_code=404)
+

@@ -13,10 +13,14 @@ static WebSocketsClient webSocket;
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
         case WStype_DISCONNECTED:
-            Serial.printf("[WSc] Disconnected!\n");
+            if (length > 0 && payload != NULL) {
+                Serial.printf("[WSc] Disconnected! Reason: %.*s (Free Heap: %u bytes)\n", (int)length, (char*)payload, (unsigned int)ESP.getFreeHeap());
+            } else {
+                Serial.printf("[WSc] Disconnected! (Free Heap: %u bytes)\n", (unsigned int)ESP.getFreeHeap());
+            }
             break;
         case WStype_CONNECTED:
-            Serial.printf("[WSc] Connected to url: %.*s\n", (int)length, (char*)payload);
+            Serial.printf("[WSc] Connected to url: %.*s (Free Heap: %u bytes)\n", (int)length, (char*)payload, (unsigned int)ESP.getFreeHeap());
             break;
         case WStype_TEXT:
         {
@@ -102,6 +106,7 @@ void websocketSetup() {
         path += WEBSOCKET_TOKEN;
     }
     
+    Serial.printf("[WSc] Free Heap: %u bytes\n", (unsigned int)ESP.getFreeHeap());
     if (WEBSOCKET_PORT == 443) {
         Serial.printf("[WSc] Initializing SSL WebSocket (WSS) to %s:%d%s\n", WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
         webSocket.beginSSL(WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());

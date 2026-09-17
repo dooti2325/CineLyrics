@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>
 #include "config.h"
 #include "display.h"
 #include "animations.h"
@@ -8,12 +9,14 @@
 #include "visuals.h"
 #include "ble_manager.h"
 
+// Frame timing
 unsigned long lastFrameTime = 0;
 const int targetFPS = 30;
 const int frameDelay = 1000 / targetFPS;
 
 DisplayMode currentMode = MODE_LYRICS;
 
+// Touch sensor debouncing
 bool lastDebouncedState = false;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
@@ -23,6 +26,44 @@ unsigned long lastTapReleaseTime = 0;
 int touchCount = 0;
 bool isLongPressHandled = false;
 bool isAsleep = false;
+
+// Persistent Wi-Fi storage
+static Preferences preferences;
+static bool wifiConnected = false;
+static unsigned long lastWifiRetryTime = 0;
+static const unsigned long wifiRetryInterval = 30000; // Retry Wi-Fi every 30s if disconnected
+static bool wsInitialized = false;
+
+bool attemptWifiConnection(const char* ssid, const char* password, unsigned long timeoutMs = 8000) {
+    if (!ssid || strlen(ssid) == 0) {
+        Serial.println("[WiFi] No SSID configured");
+        return false;
+    }
+
+    Serial.printf("[WiFi] Connecting to: %s\n", ssid);
+    WiFi.disconnect(true);
+    delay(100);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeoutMs) {
+        delay(250);
+        Serial.print(".");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\n[WiFi] Connected! IP: " + WiFi.localIP().toString());
+        wifiConnected = true;
+        bleSetWifiStatus("CONNECTED");
+        return true;
+    } else {
+        Serial.println("\n[WiFi] Connection failed or timed out.");
+        wifiConnected = false;
+        bleSetWifiStatus("FAILED");
+        return false;
+    }
+}
 
 void handleSingleTap() {
     if (bleHasActiveNotification()) {
@@ -76,51 +117,110 @@ void handleLongPress() {
 
 void setup() {
     Serial.begin(115200);
-    
+
     // Initialize Touch Sensor
     pinMode(TOUCH_PIN, INPUT);
-    
+
     // Initialize Display
     displaySetup();
     displayClear();
-    drawCenteredText("CineLyric", 32, u8g2_font_helvB10_te);
-    drawCenteredText("Connecting WiFi...", 50, u8g2_font_helvB08_tr);
+    drawCenteredText("CineLyric", 26, u8g2_font_helvB10_te);
+    drawCenteredText("Starting DeskBuddy...", 48, u8g2_font_helvB08_tr);
     displayUpdate();
 
-    // Connect WiFi
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.print("Connecting to WiFi");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nConnected to WiFi");
-    
-    displayClear();
-    drawCenteredText("WiFi Connected", 32, u8g2_font_helvB10_te);
-    displayUpdate();
-    delay(1000);
-
-    // Initialize WebSocket
-    websocketSetup();
-    
-    // Initialize DeskBuddy BLE
+    // Initialize DeskBuddy BLE early so provisioning is available immediately
     bleSetup();
-    
-    // Initial state
+
+    // Initialize Face
     setupFace();
+
+    // Load Wi-Fi credentials from Preferences NVS (or fall back to config.h / secrets.h)
+    preferences.begin("cinelyric", false);
+    String activeSSID = preferences.getString("ssid", DEFAULT_WIFI_SSID);
+    String activePass = preferences.getString("pass", DEFAULT_WIFI_PASSWORD);
+
+    displayClear();
+    drawCenteredText("CineLyric", 26, u8g2_font_helvB10_te);
+    drawCenteredText("Connecting WiFi...", 48, u8g2_font_helvB08_tr);
+    displayUpdate();
+
+    // Attempt connection with bounded 8-second timeout
+    if (activeSSID.length() > 0 && attemptWifiConnection(activeSSID.c_str(), activePass.c_str(), 8000)) {
+        displayClear();
+        drawCenteredText("WiFi Connected", 32, u8g2_font_helvB10_te);
+        displayUpdate();
+        delay(800);
+
+        websocketSetup();
+        wsInitialized = true;
+        currentMode = MODE_LYRICS;
+    } else {
+        displayClear();
+        drawCenteredText("WiFi Offline", 28, u8g2_font_helvB10_te);
+        drawCenteredText("BLE Standalone Mode", 48, u8g2_font_6x12_tf);
+        displayUpdate();
+        delay(1200);
+
+        // Graceful standalone face mode
+        currentMode = MODE_FACE;
+        isAsleep = false;
+        playFaceAnimation(ANIM_WAKE);
+    }
+
     AnimPacket initPkt = {"Waiting for", "Spotify...", "fade", "", "", 120.0, 0.5, 5000, 0.5, 0.5, "Calm", "Verse", "None", "Medium", 64, 32, false, false, "None"};
     setAnimationState(initPkt);
 }
 
 void loop() {
-    // Handle WebSocket events
-    websocketLoop();
-    
-    // Handle DeskBuddy BLE events
+    // 1. Process BLE Events
     bleLoop();
 
-    // Handle incoming BLE Media Actions
+    // 2. Handle BLE Wi-Fi Provisioning Updates
+    if (bleHasWifiConfigUpdate()) {
+        String newSSID, newPass;
+        if (bleGetWifiConfig(newSSID, newPass)) {
+            Serial.printf("[Provisioning] Applying new Wi-Fi credentials: %s\n", newSSID.c_str());
+            bleSetWifiStatus("CONNECTING");
+
+            displayClear();
+            drawCenteredText("WiFi Setup", 26, u8g2_font_helvB10_te);
+            drawCenteredText("Connecting...", 48, u8g2_font_helvB08_tr);
+            displayUpdate();
+
+            if (attemptWifiConnection(newSSID.c_str(), newPass.c_str(), 10000)) {
+                // Save to persistent flash
+                preferences.putString("ssid", newSSID);
+                preferences.putString("pass", newPass);
+
+                displayClear();
+                drawCenteredText("WiFi Connected!", 32, u8g2_font_helvB10_te);
+                displayUpdate();
+                delay(1000);
+
+                if (!wsInitialized) {
+                    websocketSetup();
+                    wsInitialized = true;
+                }
+                currentMode = MODE_LYRICS;
+            } else {
+                displayClear();
+                drawCenteredText("WiFi Failed", 28, u8g2_font_helvB10_te);
+                drawCenteredText("Check credentials", 48, u8g2_font_6x12_tf);
+                displayUpdate();
+                delay(1500);
+            }
+        }
+    }
+
+    // 3. Handle Pending Face Animation Requests from BLE safely on Core 1
+    if (bleHasPendingFaceAnim()) {
+        FaceAnim anim = bleConsumePendingFaceAnim();
+        currentMode = MODE_FACE;
+        isAsleep = (anim == ANIM_SLEEP);
+        playFaceAnimation(anim);
+    }
+
+    // 4. Handle incoming BLE Media Actions
     MediaAction mediaAction = bleConsumeMediaAction();
     if (mediaAction != MEDIA_NONE) {
         if (mediaAction == MEDIA_TOGGLE) {
@@ -131,46 +231,61 @@ void loop() {
             Serial.println("[DeskBuddy] BLE Media Previous triggered");
         }
     }
-    
-    // Handle Touch Sensor Toggle
-    // Using digitalRead for standard capacitive touch modules (like TTP223).
-    // If you are using a bare wire directly to an ESP32 touch pin, use: bool currentTouchState = (touchRead(TOUCH_PIN) < TOUCH_THRESHOLD);
-    bool rawTouchState = (digitalRead(TOUCH_PIN) == HIGH); 
-    
+
+    // 5. Handle WebSocket events if Wi-Fi is connected
+    if (WiFi.status() == WL_CONNECTED) {
+        wifiConnected = true;
+        if (!wsInitialized) {
+            websocketSetup();
+            wsInitialized = true;
+        }
+        websocketLoop();
+    } else {
+        wifiConnected = false;
+        // Non-blocking periodic reconnect attempt
+        if (millis() - lastWifiRetryTime > wifiRetryInterval) {
+            lastWifiRetryTime = millis();
+            String savedSSID = preferences.getString("ssid", DEFAULT_WIFI_SSID);
+            if (savedSSID.length() > 0) {
+                Serial.println("[WiFi] Reconnecting in background...");
+                WiFi.reconnect();
+            }
+        }
+    }
+
+    // 6. Handle Touch Sensor
+    bool rawTouchState = (digitalRead(TOUCH_PIN) == HIGH);
+
     if (rawTouchState != lastDebouncedState) {
         lastDebounceTime = millis();
     }
 
     if ((millis() - lastDebounceTime) > debounceDelay) {
         bool currentTouchState = rawTouchState;
-        
+
         if (currentTouchState && !isLongPressHandled) {
             if (touchStartTime == 0) {
-                touchStartTime = millis(); // Just started touching
+                touchStartTime = millis();
             } else if (millis() - touchStartTime > 600) {
-                // Trigger long press once
                 handleLongPress();
                 isLongPressHandled = true;
-                touchCount = 0; // Cancel any taps
+                touchCount = 0;
             }
-        } 
-        else if (!currentTouchState) {
+        } else if (!currentTouchState) {
             if (touchStartTime != 0) {
                 unsigned long duration = millis() - touchStartTime;
                 if (!isLongPressHandled && duration < 600) {
-                    // It was a short tap
                     touchCount++;
                     lastTapReleaseTime = millis();
                 }
-                // Reset touch trackers
                 touchStartTime = 0;
                 isLongPressHandled = false;
             }
         }
     }
     lastDebouncedState = rawTouchState;
-    
-    // Check if tap sequence is complete (no new taps within 400ms)
+
+    // Check tap sequence
     if (touchCount > 0 && touchStartTime == 0) {
         if (millis() - lastTapReleaseTime > 400) {
             if (touchCount == 1) {
@@ -181,8 +296,8 @@ void loop() {
             touchCount = 0;
         }
     }
-    
-    // Frame pacing
+
+    // 7. Frame pacing & Rendering
     unsigned long currentMillis = millis();
     if (currentMillis - lastFrameTime >= frameDelay) {
         lastFrameTime = currentMillis;

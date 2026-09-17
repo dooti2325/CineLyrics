@@ -8,5 +8,8 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
 SPOTIFY_CACHE_INFO = os.getenv("SPOTIFY_CACHE_INFO", None)
 
+# Optional shared secret token for WebSocket client authorization
+DEVICE_WS_TOKEN = os.getenv("DEVICE_WS_TOKEN", "")
+
 if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
     print("WARNING: SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET not set in .env")

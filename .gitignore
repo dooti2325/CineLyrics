@@ -1,0 +1,32 @@
+# CineLyric Root .gitignore
+
+# Python virtual environment & caches
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Local secrets & OAuth tokens
+server/.env
+server/.cache
+server/.cache-*
+.cache
+.env
+
+# ESP32 local secrets & build artifacts
+esp32/CineLyric/secrets.h
+.pio/
+build/
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+*.log
+scratch/

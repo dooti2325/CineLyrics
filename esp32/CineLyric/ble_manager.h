@@ -2,6 +2,7 @@
 #define BLE_MANAGER_H
 
 #include <Arduino.h>
+#include "face.h"
 
 struct NotificationData {
     String app;
@@ -34,14 +35,23 @@ bool bleIsClientConnected();
 void bleSetBuddyBattery(uint8_t percent);
 void bleSetDeviceStatus(const char* status);
 
-// Access received telemetry & notifications
+// Access received telemetry & notifications (Thread-safe)
 bool bleHasActiveNotification();
 NotificationData bleGetNotification();
 void bleDismissNotification();
 
 PhoneStatusData bleGetPhoneStatus();
 
-// Media actions
+// Media actions (Thread-safe)
 MediaAction bleConsumeMediaAction();
+
+// Thread-safe dispatch of Face animations requested over BLE
+bool bleHasPendingFaceAnim();
+FaceAnim bleConsumePendingFaceAnim();
+
+// Thread-safe Wi-Fi Provisioning over BLE
+bool bleHasWifiConfigUpdate();
+bool bleGetWifiConfig(String& ssid, String& password);
+void bleSetWifiStatus(const char* status);
 
 #endif // BLE_MANAGER_H

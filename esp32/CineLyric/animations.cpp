@@ -28,7 +28,7 @@ void setAnimationState(const AnimPacket& pkt) {
         animOverridden = false; // Reset override on new song
     }
     
-    // Copy the struct
+    // Copy the struct safely
     currentPacket = pkt;
     
     if (!animOverridden) {
@@ -82,8 +82,12 @@ void drawSlideUp() {
 void drawTypewriter() {
     long elapsed = millis() - animStartTime;
     int len = strlen(currentPacket.lyric);
+    if (len <= 0) return;
     int charsToShow = (elapsed * len) / 1000; // Type out over 1s
     if (charsToShow > len) charsToShow = len;
+    if (charsToShow > (int)sizeof(currentPacket.lyric) - 1) {
+        charsToShow = sizeof(currentPacket.lyric) - 1;
+    }
     
     char temp[128];
     strncpy(temp, currentPacket.lyric, charsToShow);
@@ -94,6 +98,8 @@ void drawTypewriter() {
 
 void drawKaraoke() {
     long elapsed = millis() - animStartTime;
+    int len = strlen(currentPacket.lyric);
+    if (len <= 0) return;
     
     int numWords = 1;
     for (int i = 0; currentPacket.lyric[i] != '\0'; i++) {
@@ -106,22 +112,31 @@ void drawKaraoke() {
     int activeIndex = elapsed / timePerWord;
     if (activeIndex >= numWords) activeIndex = numWords - 1;
     
-    char formatted[256] = "";
+    char formatted[256];
+    formatted[0] = '\0';
+    size_t curLen = 0;
+
     char temp[128];
-    strncpy(temp, currentPacket.lyric, sizeof(temp));
+    strncpy(temp, currentPacket.lyric, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
     
     char* token = strtok(temp, " ");
     int currentIndex = 0;
     
     while (token != NULL) {
+        char wordBuf[64];
         if (currentIndex == activeIndex) {
-            strcat(formatted, "[");
-            strcat(formatted, token);
-            strcat(formatted, "]");
+            snprintf(wordBuf, sizeof(wordBuf), "[%s] ", token);
         } else {
-            strcat(formatted, token);
+            snprintf(wordBuf, sizeof(wordBuf), "%s ", token);
         }
-        strcat(formatted, " ");
+        size_t wLen = strlen(wordBuf);
+        if (curLen + wLen < sizeof(formatted) - 1) {
+            strncat(formatted, wordBuf, sizeof(formatted) - curLen - 1);
+            curLen += wLen;
+        } else {
+            break;
+        }
         token = strtok(NULL, " ");
         currentIndex++;
     }
@@ -144,17 +159,29 @@ void drawWave() {
     const uint8_t* font = getFontByStyle(currentPacket.font);
     u8g2.setFont(font);
     
-    int len = strlen(currentPacket.lyric);
     int startX = (128 - u8g2.getUTF8Width(currentPacket.lyric)) / 2;
-    
     int currentX = startX;
-    char singleChar[2] = {0, 0};
+    int charIndex = 0;
+    const char* p = currentPacket.lyric;
     
-    for (int i = 0; i < len; i++) {
-        singleChar[0] = currentPacket.lyric[i];
-        int offsetY = sin((elapsed / 100.0) + i) * 5;
-        u8g2.drawUTF8(currentX, 36 + offsetY, singleChar);
-        currentX += u8g2.getUTF8Width(singleChar);
+    // Safely iterate UTF-8 codepoints without corrupting multi-byte sequences
+    while (*p) {
+        char charBuf[5] = {0};
+        int charBytes = 1;
+        unsigned char c = (unsigned char)*p;
+        if ((c & 0xE0) == 0xC0) charBytes = 2;
+        else if ((c & 0xF0) == 0xE0) charBytes = 3;
+        else if ((c & 0xF8) == 0xF0) charBytes = 4;
+        
+        for (int b = 0; b < charBytes && *p; b++) {
+            charBuf[b] = *p++;
+        }
+        charBuf[charBytes] = '\0';
+        
+        int offsetY = sin((elapsed / 100.0) + charIndex) * 5;
+        u8g2.drawUTF8(currentX, 36 + offsetY, charBuf);
+        currentX += u8g2.getUTF8Width(charBuf);
+        charIndex++;
     }
 }
 
@@ -179,7 +206,7 @@ void updateAnimation() {
         float beatInterval = 60000.0 / currentPacket.bpm;
         float beatPhase = fmod((float)millis(), beatInterval) / beatInterval;
         
-        // Apply camera effect (currently only calculate, not globally applied to u8g2 as there's no native global offset without manual translation)
+        // Apply camera effect
         int camX = 0, camY = 0;
         if (currentPacket.shake) {
             applyCameraEffect("Shake", beatPhase, currentPacket.beatStrength, camX, camY);

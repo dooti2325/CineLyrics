@@ -31,12 +31,28 @@ The backend connects to Spotify to track what you're currently playing, fetches 
    ```bash
    cp .env.example .env
    ```
-4. Start the server:
+4. Start the server locally:
    ```bash
    uvicorn app:app --host 0.0.0.0 --port 8000
    ```
-5. Note your computer's local IP address (e.g., `192.168.1.X`), you will need it for the ESP32 config.
-6. The first time you run this and play a song, it will open a browser window asking you to log in to Spotify and authorize the app.
+5. The first time you run this and play a song, it will open a browser window asking you to log in to Spotify and authorize the app.
+
+### Cloud Deployment (Render)
+CineLyric backend is also deployed live on **Render**:
+- **Live URL**: [https://cinelyrics.onrender.com](https://cinelyrics.onrender.com/)
+- **Secure WebSocket**: `wss://cinelyrics.onrender.com/ws`
+- **Hosted Web Bluetooth Controller & Wi-Fi Provisioner**: [https://cinelyrics.onrender.com/ble](https://cinelyrics.onrender.com/ble)
+
+> [!TIP]
+> **HTTPS for Web Bluetooth:** The Web Bluetooth API strictly requires a Secure Context (HTTPS). You can use [https://cinelyrics.onrender.com/ble](https://cinelyrics.onrender.com/ble) on any mobile phone (Chrome for Android) or PC/Mac to pair and configure DeskBuddy without hosting a local web server!
+
+#### Render Environment Variables
+On Render dashboard, configure the following Environment Variables:
+- `SPOTIFY_CLIENT_ID`: Your Spotify Developer Client ID
+- `SPOTIFY_CLIENT_SECRET`: Your Spotify Developer Client Secret
+- `SPOTIFY_REDIRECT_URI`: `https://cinelyrics.onrender.com/callback` (or your callback URI registered in Spotify Dashboard)
+- `SPOTIFY_CACHE_INFO`: JSON string containing your OAuth token payload (enables persistent token caching across ephemeral Render restarts)
+- `DEVICE_WS_TOKEN`: (Optional) Shared token for WebSocket authorization
 
 ## 2. ESP32 Setup (Arduino IDE)
 
@@ -50,10 +66,16 @@ The backend connects to Spotify to track what you're currently playing, fetches 
 
 ### Configuration
 1. Open `esp32/CineLyric/CineLyric.ino` in the Arduino IDE.
-2. Open `config.h` in the IDE (it should be in a tab).
-3. Update `WIFI_SSID` and `WIFI_PASSWORD` with your Wi-Fi credentials.
-4. Update `WEBSOCKET_HOST` with your computer's local IP address where the Python server is running.
-5. The default pins for I2C are SDA=21, SCL=22. Adjust in `config.h` if needed.
+2. The firmware is pre-configured to connect securely to the live Render cloud backend:
+   ```cpp
+   WEBSOCKET_HOST = "cinelyrics.onrender.com"; // Default Render cloud URL
+   WEBSOCKET_PORT = 443;                       // Port 443 with SSL (WSS)
+   ```
+   *(If you wish to test with a local server, change `WEBSOCKET_HOST` to your local LAN IP and `WEBSOCKET_PORT` to 8000).*
+3. **Wi-Fi Setup:** You can either:
+   - **Method A (Zero Code / BLE Provisioning):** Power on the ESP32, open [https://cinelyrics.onrender.com/ble](https://cinelyrics.onrender.com/ble), pair with DeskBuddy, and submit your Wi-Fi credentials under Card 6.
+   - **Method B (Compile-time fallback):** Copy `esp32/CineLyric/secrets.h.example` to `secrets.h` and fill in `SECRET_WIFI_SSID` and `SECRET_WIFI_PASSWORD`.
+4. The default pins for I2C OLED are SDA=21, SCL=22. Adjust in `config.h` if needed.
 
 ### Wiring
 
@@ -77,13 +99,20 @@ The backend connects to Spotify to track what you're currently playing, fetches 
 
 ## 4. DeskBuddy BLE
 
-DeskBuddy now broadcasts over Bluetooth Low Energy as `DeskBuddy-BLE`, offering 5 prioritized GATT services:
+DeskBuddy broadcasts over Bluetooth Low Energy as `DeskBuddy-BLE`, offering 6 prioritized GATT services:
 
 - **STATUS**: Read & notify DeskBuddy battery, BLE connection state, and device state (`IDLE`, `ACTIVE`, `SLEEPING`).
 - **COMMAND**: Remote control to `wake`, `sleep`, or trigger custom emotion animations (`happy`, `sad`, `shock`, `love`, `laugh`, `vibe`, etc.).
 - **NOTIFICATION**: Receive incoming notifications (`app`, `title`, `message`, `timestamp`) and render an animated pop-up banner on the OLED with auto-dismiss.
 - **PHONE**: Phone battery percentage, charging state, and connection telemetry.
 - **MEDIA**: Remote media triggers (`play/pause`, `next`, `previous`).
+- **WIFI PROVISIONING**: Dynamically configure Wi-Fi SSID and Password over BLE, saved to ESP32 Flash (NVS Preferences) so any new user can connect DeskBuddy to their network without reflashing code!
 
-### Testing DeskBuddy BLE
-Open `tools/ble_test.html` directly in any Web-Bluetooth supported browser (Google Chrome or Microsoft Edge on PC/Mac/Android). Click **"Connect DeskBuddy"** to pair, view battery telemetry, send custom emotions, and test real-time notification popups.
+### Testing DeskBuddy BLE & Wi-Fi Provisioning
+Open `tools/ble_test.html` (or navigate to `http://localhost:8000/ble`) directly in any Web-Bluetooth supported browser (Google Chrome or Microsoft Edge on PC/Mac/Android):
+1. Click **"Connect DeskBuddy"** to pair.
+2. In **Card 6 (Wi-Fi Configuration)**, enter your Wi-Fi SSID & Password and click **"Save & Connect Buddy to Wi-Fi"**.
+3. View real-time connection status on the OLED screen and Web Bluetooth console!
+
+### Standalone Offline Mode
+If Wi-Fi is unconfigured, out of range, or temporarily down, DeskBuddy automatically enters **Standalone Mode** (`MODE_FACE`), displaying interactive animated expressions and remaining fully controllable over BLE.

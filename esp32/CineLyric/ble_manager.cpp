@@ -7,6 +7,11 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
+// FreeRTOS Synchronization Mutex
+static SemaphoreHandle_t bleMutex = nullptr;
+#define BLE_LOCK()   do { if (bleMutex) xSemaphoreTake(bleMutex, portMAX_DELAY); } while(0)
+#define BLE_UNLOCK() do { if (bleMutex) xSemaphoreGive(bleMutex); } while(0)
+
 // Global State
 static bool deviceConnected = false;
 static bool oldDeviceConnected = false;
@@ -16,18 +21,37 @@ static BLEServer* pServer = nullptr;
 static BLECharacteristic* pCharBuddyBattery = nullptr;
 static BLECharacteristic* pCharBleConn = nullptr;
 static BLECharacteristic* pCharDeviceStatus = nullptr;
+static BLECharacteristic* pCharWifiStatus = nullptr;
 
 static NotificationData currentNotification = {"", "", "", "", false, 0};
 static PhoneStatusData currentPhoneStatus = {100, false, 0, false};
 static MediaAction pendingMediaAction = MEDIA_NONE;
 
+// Thread-safe Face Animation Queue
+static bool hasPendingFaceAnimState = false;
+static FaceAnim pendingFaceAnimValue = ANIM_IDLE;
+
+// Wi-Fi Provisioning Buffer
+static String pendingWifiSSID = "";
+static String pendingWifiPass = "";
+static bool wifiConfigUpdatedFlag = false;
+
 // Forward declaration
 extern bool isAsleep;
+
+static void queueFaceAnim(FaceAnim anim) {
+    BLE_LOCK();
+    pendingFaceAnimValue = anim;
+    hasPendingFaceAnimState = true;
+    BLE_UNLOCK();
+}
 
 // Server connection callbacks
 class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) override {
+        BLE_LOCK();
         deviceConnected = true;
+        BLE_UNLOCK();
         Serial.println("[BLE] Client connected");
         if (pCharBleConn) {
             uint8_t connState = 1;
@@ -37,7 +61,9 @@ class ServerCallbacks : public BLEServerCallbacks {
     }
 
     void onDisconnect(BLEServer* pServer) override {
+        BLE_LOCK();
         deviceConnected = false;
+        BLE_UNLOCK();
         Serial.println("[BLE] Client disconnected");
         if (pCharBleConn) {
             uint8_t connState = 0;
@@ -54,36 +80,32 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
         if (uuid.equalsIgnoreCase(CHAR_CMD_WAKE_UUID)) {
             Serial.println("[BLE] Command: WAKE");
-            isAsleep = false;
-            playFaceAnimation(ANIM_WAKE);
+            queueFaceAnim(ANIM_WAKE);
             bleSetDeviceStatus("ACTIVE");
         } else if (uuid.equalsIgnoreCase(CHAR_CMD_SLEEP_UUID)) {
             Serial.println("[BLE] Command: SLEEP");
-            isAsleep = true;
-            playFaceAnimation(ANIM_SLEEP);
+            queueFaceAnim(ANIM_SLEEP);
             bleSetDeviceStatus("SLEEPING");
         } else if (uuid.equalsIgnoreCase(CHAR_CMD_CUSTOM_UUID)) {
             String emotion = value;
             emotion.toLowerCase();
             emotion.trim();
+            if (emotion.length() > 32) emotion = emotion.substring(0, 32);
             Serial.printf("[BLE] Command: CUSTOM EMOTION '%s'\n", emotion.c_str());
 
-            currentMode = MODE_FACE;
-            isAsleep = false;
-
-            if (emotion == "happy") playFaceAnimation(ANIM_HAPPY);
-            else if (emotion == "laugh") playFaceAnimation(ANIM_LAUGH);
-            else if (emotion == "sad") playFaceAnimation(ANIM_SAD);
-            else if (emotion == "love") playFaceAnimation(ANIM_LOVE);
-            else if (emotion == "shock") playFaceAnimation(ANIM_SHOCK);
-            else if (emotion == "sleep") { isAsleep = true; playFaceAnimation(ANIM_SLEEP); }
-            else if (emotion == "wake") { isAsleep = false; playFaceAnimation(ANIM_WAKE); }
-            else if (emotion == "angry") playFaceAnimation(ANIM_ANGRY);
-            else if (emotion == "curious") playFaceAnimation(ANIM_CURIOUS);
-            else if (emotion == "thinking") playFaceAnimation(ANIM_THINKING);
-            else if (emotion == "vibe") playFaceAnimation(ANIM_VIBE);
+            if (emotion == "happy") queueFaceAnim(ANIM_HAPPY);
+            else if (emotion == "laugh") queueFaceAnim(ANIM_LAUGH);
+            else if (emotion == "sad") queueFaceAnim(ANIM_SAD);
+            else if (emotion == "love") queueFaceAnim(ANIM_LOVE);
+            else if (emotion == "shock") queueFaceAnim(ANIM_SHOCK);
+            else if (emotion == "sleep") queueFaceAnim(ANIM_SLEEP);
+            else if (emotion == "wake") queueFaceAnim(ANIM_WAKE);
+            else if (emotion == "angry") queueFaceAnim(ANIM_ANGRY);
+            else if (emotion == "curious") queueFaceAnim(ANIM_CURIOUS);
+            else if (emotion == "thinking") queueFaceAnim(ANIM_THINKING);
+            else if (emotion == "vibe") queueFaceAnim(ANIM_VIBE);
             else {
-                playFaceAnimation(ANIM_CURIOUS);
+                queueFaceAnim(ANIM_CURIOUS);
             }
         }
     }
@@ -93,8 +115,13 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 class NotificationCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* pCharacteristic) override {
         String value = pCharacteristic->getValue();
+        // Bound length to prevent heap exhaustion
+        if (value.length() > 128) {
+            value = value.substring(0, 128);
+        }
         String uuid = pCharacteristic->getUUID().toString();
 
+        BLE_LOCK();
         if (uuid.equalsIgnoreCase(CHAR_NOTIF_APP_UUID)) {
             currentNotification.app = value;
         } else if (uuid.equalsIgnoreCase(CHAR_NOTIF_TITLE_UUID)) {
@@ -107,11 +134,13 @@ class NotificationCallbacks : public BLECharacteristicCallbacks {
                 currentNotification.app.c_str(), 
                 currentNotification.title.c_str(), 
                 currentNotification.message.c_str());
-            
-            // Trigger curiosity/shock animation on notification
-            playFaceAnimation(ANIM_SHOCK);
         } else if (uuid.equalsIgnoreCase(CHAR_NOTIF_TIME_UUID)) {
             currentNotification.timestamp = value;
+        }
+        BLE_UNLOCK();
+
+        if (uuid.equalsIgnoreCase(CHAR_NOTIF_MSG_UUID)) {
+            queueFaceAnim(ANIM_SHOCK);
         }
     }
 };
@@ -122,11 +151,11 @@ class PhoneCallbacks : public BLECharacteristicCallbacks {
         String value = pCharacteristic->getValue();
         String uuid = pCharacteristic->getUUID().toString();
 
+        BLE_LOCK();
         if (uuid.equalsIgnoreCase(CHAR_PHONE_BATTERY_UUID)) {
             if (value.length() > 0) {
                 currentPhoneStatus.battery = (uint8_t)value[0];
                 if (value.length() > 1 && value[0] >= '0' && value[0] <= '9') {
-                    // Passed as string "85"
                     currentPhoneStatus.battery = (uint8_t)value.toInt();
                 }
                 currentPhoneStatus.updated = true;
@@ -144,6 +173,7 @@ class PhoneCallbacks : public BLECharacteristicCallbacks {
                 currentPhoneStatus.updated = true;
             }
         }
+        BLE_UNLOCK();
     }
 };
 
@@ -151,6 +181,7 @@ class PhoneCallbacks : public BLECharacteristicCallbacks {
 class MediaCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* pCharacteristic) override {
         String uuid = pCharacteristic->getUUID().toString();
+        BLE_LOCK();
         if (uuid.equalsIgnoreCase(CHAR_MEDIA_PLAYPAUSE_UUID)) {
             Serial.println("[BLE] Media: PLAY/PAUSE");
             pendingMediaAction = MEDIA_TOGGLE;
@@ -161,6 +192,30 @@ class MediaCallbacks : public BLECharacteristicCallbacks {
             Serial.println("[BLE] Media: PREVIOUS");
             pendingMediaAction = MEDIA_PREVIOUS;
         }
+        BLE_UNLOCK();
+    }
+};
+
+// Wi-Fi Configuration Callback
+class WifiConfigCallbacks : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) override {
+        String value = pCharacteristic->getValue();
+        String uuid = pCharacteristic->getUUID().toString();
+
+        BLE_LOCK();
+        if (uuid.equalsIgnoreCase(CHAR_WIFI_SSID_UUID)) {
+            if (value.length() > 64) value = value.substring(0, 64);
+            pendingWifiSSID = value;
+            Serial.printf("[BLE] Wi-Fi SSID received: %s\n", pendingWifiSSID.c_str());
+        } else if (uuid.equalsIgnoreCase(CHAR_WIFI_PASS_UUID)) {
+            if (value.length() > 64) value = value.substring(0, 64);
+            pendingWifiPass = value;
+            Serial.println("[BLE] Wi-Fi Password received");
+        } else if (uuid.equalsIgnoreCase(CHAR_WIFI_APPLY_UUID)) {
+            wifiConfigUpdatedFlag = true;
+            Serial.println("[BLE] Wi-Fi Apply command received");
+        }
+        BLE_UNLOCK();
     }
 };
 
@@ -168,8 +223,13 @@ static CommandCallbacks cmdCallbacks;
 static NotificationCallbacks notifCallbacks;
 static PhoneCallbacks phoneCallbacks;
 static MediaCallbacks mediaCallbacks;
+static WifiConfigCallbacks wifiConfigCallbacks;
 
 void bleSetup() {
+    if (!bleMutex) {
+        bleMutex = xSemaphoreCreateMutex();
+    }
+
     Serial.println("[BLE] Initializing DeskBuddy BLE...");
     BLEDevice::init(BLE_DEVICE_NAME);
 
@@ -280,9 +340,34 @@ void bleSetup() {
     pCharCustom->setCallbacks(&cmdCallbacks);
     pCmdService->start();
 
+    // 6. WI-FI PROVISIONING SERVICE
+    BLEService* pWifiService = pServer->createService(SERVICE_WIFI_UUID);
+    BLECharacteristic* pCharWifiSSID = pWifiService->createCharacteristic(
+        CHAR_WIFI_SSID_UUID, BLECharacteristic::PROPERTY_WRITE
+    );
+    pCharWifiSSID->setCallbacks(&wifiConfigCallbacks);
+
+    BLECharacteristic* pCharWifiPass = pWifiService->createCharacteristic(
+        CHAR_WIFI_PASS_UUID, BLECharacteristic::PROPERTY_WRITE
+    );
+    pCharWifiPass->setCallbacks(&wifiConfigCallbacks);
+
+    BLECharacteristic* pCharWifiApply = pWifiService->createCharacteristic(
+        CHAR_WIFI_APPLY_UUID, BLECharacteristic::PROPERTY_WRITE
+    );
+    pCharWifiApply->setCallbacks(&wifiConfigCallbacks);
+
+    pCharWifiStatus = pWifiService->createCharacteristic(
+        CHAR_WIFI_STATUS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+    );
+    pCharWifiStatus->addDescriptor(new BLE2902());
+    pCharWifiStatus->setValue("IDLE");
+    pWifiService->start();
+
     // Setup Advertising
     BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_STATUS_UUID);
+    pAdvertising->addServiceUUID(SERVICE_WIFI_UUID);
     pAdvertising->setScanResponse(true);
     pAdvertising->setMinPreferred(0x06);
     BLEDevice::startAdvertising();
@@ -290,34 +375,44 @@ void bleSetup() {
 }
 
 void bleLoop() {
+    bool isConn = false;
+    BLE_LOCK();
+    isConn = deviceConnected;
+    BLE_UNLOCK();
+
     // Restart advertising if disconnected
-    if (!deviceConnected && oldDeviceConnected) {
+    if (!isConn && oldDeviceConnected) {
         delay(100);
         BLEDevice::startAdvertising();
         Serial.println("[BLE] Restarted advertising after disconnect");
-        oldDeviceConnected = deviceConnected;
+        oldDeviceConnected = false;
     }
     // Update connected state
-    if (deviceConnected && !oldDeviceConnected) {
-        oldDeviceConnected = deviceConnected;
+    if (isConn && !oldDeviceConnected) {
+        oldDeviceConnected = true;
     }
 
     // Auto-dismiss notification after timeout
+    BLE_LOCK();
     if (currentNotification.active) {
         if (millis() - currentNotification.receivedAt > NOTIFICATION_POPUP_MS) {
-            bleDismissNotification();
+            currentNotification.active = false;
         }
     }
+    BLE_UNLOCK();
 }
 
 bool bleIsClientConnected() {
-    return deviceConnected;
+    BLE_LOCK();
+    bool conn = deviceConnected;
+    BLE_UNLOCK();
+    return conn;
 }
 
 void bleSetBuddyBattery(uint8_t percent) {
     if (pCharBuddyBattery) {
         pCharBuddyBattery->setValue(&percent, 1);
-        if (deviceConnected) {
+        if (bleIsClientConnected()) {
             pCharBuddyBattery->notify();
         }
     }
@@ -326,30 +421,87 @@ void bleSetBuddyBattery(uint8_t percent) {
 void bleSetDeviceStatus(const char* status) {
     if (pCharDeviceStatus) {
         pCharDeviceStatus->setValue(status);
-        if (deviceConnected) {
+        if (bleIsClientConnected()) {
             pCharDeviceStatus->notify();
         }
     }
 }
 
 bool bleHasActiveNotification() {
-    return currentNotification.active;
+    BLE_LOCK();
+    bool active = currentNotification.active;
+    BLE_UNLOCK();
+    return active;
 }
 
 NotificationData bleGetNotification() {
-    return currentNotification;
+    BLE_LOCK();
+    NotificationData copy = currentNotification;
+    BLE_UNLOCK();
+    return copy;
 }
 
 void bleDismissNotification() {
+    BLE_LOCK();
     currentNotification.active = false;
+    BLE_UNLOCK();
 }
 
 PhoneStatusData bleGetPhoneStatus() {
-    return currentPhoneStatus;
+    BLE_LOCK();
+    PhoneStatusData copy = currentPhoneStatus;
+    BLE_UNLOCK();
+    return copy;
 }
 
 MediaAction bleConsumeMediaAction() {
+    BLE_LOCK();
     MediaAction action = pendingMediaAction;
     pendingMediaAction = MEDIA_NONE;
+    BLE_UNLOCK();
     return action;
+}
+
+bool bleHasPendingFaceAnim() {
+    BLE_LOCK();
+    bool has = hasPendingFaceAnimState;
+    BLE_UNLOCK();
+    return has;
+}
+
+FaceAnim bleConsumePendingFaceAnim() {
+    BLE_LOCK();
+    FaceAnim anim = pendingFaceAnimValue;
+    hasPendingFaceAnimState = false;
+    BLE_UNLOCK();
+    return anim;
+}
+
+bool bleHasWifiConfigUpdate() {
+    BLE_LOCK();
+    bool updated = wifiConfigUpdatedFlag;
+    BLE_UNLOCK();
+    return updated;
+}
+
+bool bleGetWifiConfig(String& ssid, String& password) {
+    BLE_LOCK();
+    if (!wifiConfigUpdatedFlag) {
+        BLE_UNLOCK();
+        return false;
+    }
+    ssid = pendingWifiSSID;
+    password = pendingWifiPass;
+    wifiConfigUpdatedFlag = false;
+    BLE_UNLOCK();
+    return true;
+}
+
+void bleSetWifiStatus(const char* status) {
+    if (pCharWifiStatus) {
+        pCharWifiStatus->setValue(status);
+        if (bleIsClientConnected()) {
+            pCharWifiStatus->notify();
+        }
+    }
 }

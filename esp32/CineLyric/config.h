@@ -1,12 +1,28 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// WiFi Credentials
-const char *const WIFI_SSID = "Dooti_S23";
-const char *const WIFI_PASSWORD = "123456789";
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+
+// Fallbacks if secrets.h is not present
+#ifndef SECRET_WIFI_SSID
+#define SECRET_WIFI_SSID ""
+#endif
+#ifndef SECRET_WIFI_PASSWORD
+#define SECRET_WIFI_PASSWORD ""
+#endif
+#ifndef SECRET_WS_TOKEN
+#define SECRET_WS_TOKEN ""
+#endif
+
+// Default WiFi Credentials (loaded from secrets.h or empty for BLE provisioning)
+const char *const DEFAULT_WIFI_SSID = SECRET_WIFI_SSID;
+const char *const DEFAULT_WIFI_PASSWORD = SECRET_WIFI_PASSWORD;
+const char *const WEBSOCKET_TOKEN = SECRET_WS_TOKEN;
 
 // WebSocket Server Configuration
-const char *const WEBSOCKET_HOST ="cinelyrics.onrender.com"; // Your Render URL (without https://)
+const char *const WEBSOCKET_HOST = "cinelyrics.onrender.com"; // Your Render URL (without https://)
 const int WEBSOCKET_PORT = 443; // 443 for secure websockets (WSS)
 const char *const WEBSOCKET_PATH = "/ws";
 
@@ -54,5 +70,12 @@ extern DisplayMode currentMode;
 #define CHAR_CMD_WAKE_UUID         "4f715001-2a91-4c10-9b8c-b03a1a1f0001"
 #define CHAR_CMD_SLEEP_UUID        "4f715002-2a91-4c10-9b8c-b03a1a1f0001"
 #define CHAR_CMD_CUSTOM_UUID       "4f715003-2a91-4c10-9b8c-b03a1a1f0001"
+
+// 6. WI-FI PROVISIONING SERVICE
+#define SERVICE_WIFI_UUID          "4f716000-2a91-4c10-9b8c-b03a1a1f0001"
+#define CHAR_WIFI_SSID_UUID        "4f716001-2a91-4c10-9b8c-b03a1a1f0001"
+#define CHAR_WIFI_PASS_UUID        "4f716002-2a91-4c10-9b8c-b03a1a1f0001"
+#define CHAR_WIFI_APPLY_UUID       "4f716003-2a91-4c10-9b8c-b03a1a1f0001"
+#define CHAR_WIFI_STATUS_UUID      "4f716004-2a91-4c10-9b8c-b03a1a1f0001"
 
 #endif // CONFIG_H

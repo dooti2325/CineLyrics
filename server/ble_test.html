@@ -371,6 +371,23 @@
             </div>
         </div>
 
+        <!-- WI-FI PROVISIONING CARD -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">6. Wi-Fi Configuration</div>
+                <span id="valWifiBadge" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.06); color: var(--text-muted);">Idle</span>
+            </div>
+            <div class="form-group">
+                <label>Wi-Fi Network Name (SSID)</label>
+                <input type="text" id="wifiSSID" placeholder="e.g. MyHomeNetwork" disabled>
+            </div>
+            <div class="form-group">
+                <label>Wi-Fi Password</label>
+                <input type="password" id="wifiPass" placeholder="Wi-Fi Password" style="background: rgba(10, 14, 26, 0.8); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 9px 12px; color: var(--text-main); font-size: 0.88rem; outline: none;" disabled>
+            </div>
+            <button class="btn btn-primary" id="btnSendWifi" disabled>Save & Connect Buddy to Wi-Fi</button>
+        </div>
+
         <!-- LOG CARD -->
         <div class="card">
             <div class="card-header">
@@ -411,7 +428,13 @@
         SERVICE_COMMAND:       "4f715000-2a91-4c10-9b8c-b03a1a1f0001",
         CHAR_CMD_WAKE:         "4f715001-2a91-4c10-9b8c-b03a1a1f0001",
         CHAR_CMD_SLEEP:        "4f715002-2a91-4c10-9b8c-b03a1a1f0001",
-        CHAR_CMD_CUSTOM:       "4f715003-2a91-4c10-9b8c-b03a1a1f0001"
+        CHAR_CMD_CUSTOM:       "4f715003-2a91-4c10-9b8c-b03a1a1f0001",
+
+        SERVICE_WIFI:          "4f716000-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_WIFI_SSID:        "4f716001-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_WIFI_PASS:        "4f716002-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_WIFI_APPLY:       "4f716003-2a91-4c10-9b8c-b03a1a1f0001",
+        CHAR_WIFI_STATUS:      "4f716004-2a91-4c10-9b8c-b03a1a1f0001"
     };
 
     let bluetoothDevice = null;
@@ -461,7 +484,8 @@
                     UUIDS.SERVICE_NOTIFICATION,
                     UUIDS.SERVICE_PHONE,
                     UUIDS.SERVICE_MEDIA,
-                    UUIDS.SERVICE_COMMAND
+                    UUIDS.SERVICE_COMMAND,
+                    UUIDS.SERVICE_WIFI
                 ]
             });
 
@@ -512,6 +536,28 @@
             characteristics.cmdWake = await cmdService.getCharacteristic(UUIDS.CHAR_CMD_WAKE);
             characteristics.cmdSleep = await cmdService.getCharacteristic(UUIDS.CHAR_CMD_SLEEP);
             characteristics.cmdCustom = await cmdService.getCharacteristic(UUIDS.CHAR_CMD_CUSTOM);
+
+            try {
+                const wifiService = await gattServer.getPrimaryService(UUIDS.SERVICE_WIFI);
+                characteristics.wifiSSID = await wifiService.getCharacteristic(UUIDS.CHAR_WIFI_SSID);
+                characteristics.wifiPass = await wifiService.getCharacteristic(UUIDS.CHAR_WIFI_PASS);
+                characteristics.wifiApply = await wifiService.getCharacteristic(UUIDS.CHAR_WIFI_APPLY);
+                characteristics.wifiStatus = await wifiService.getCharacteristic(UUIDS.CHAR_WIFI_STATUS);
+
+                await characteristics.wifiStatus.startNotifications();
+                characteristics.wifiStatus.addEventListener('characteristicvaluechanged', (event) => {
+                    const decoder = new TextDecoder('utf-8');
+                    const status = decoder.decode(event.target.value);
+                    const badge = document.getElementById("valWifiBadge");
+                    if (badge) {
+                        badge.textContent = status;
+                        badge.style.color = status === "CONNECTED" ? "#34d399" : (status === "FAILED" ? "#f87171" : "#38bdf8");
+                    }
+                    log(`DeskBuddy Wi-Fi Status: ${status}`, status === "CONNECTED" ? "success" : (status === "FAILED" ? "error" : "info"));
+                });
+            } catch (wErr) {
+                log(`Wi-Fi service not available on device: ${wErr.message}`, "info");
+            }
 
             log("All DeskBuddy GATT characteristics mapped!", "success");
         } catch (err) {
@@ -618,6 +664,37 @@
             await characteristics.mediaPrev.writeValue(new Uint8Array([1]));
             log("Media: Previous track", "info");
         } catch(e) { log(e.message, "error"); }
+    };
+
+    // Wi-Fi Provisioning
+    document.getElementById("btnSendWifi").onclick = async () => {
+        try {
+            const ssid = document.getElementById("wifiSSID").value.trim();
+            const pass = document.getElementById("wifiPass").value;
+            if (!ssid) {
+                alert("Please enter a Wi-Fi Network Name (SSID)");
+                return;
+            }
+            if (!characteristics.wifiSSID || !characteristics.wifiPass || !characteristics.wifiApply) {
+                log("Wi-Fi service not connected or not supported on this DeskBuddy firmware", "error");
+                return;
+            }
+
+            log(`Sending Wi-Fi credentials for SSID: "${ssid}"...`, "info");
+            const encoder = new TextEncoder();
+            await characteristics.wifiSSID.writeValue(encoder.encode(ssid));
+            await characteristics.wifiPass.writeValue(encoder.encode(pass));
+            await characteristics.wifiApply.writeValue(encoder.encode("CONNECT"));
+
+            log("Wi-Fi credentials sent to DeskBuddy! Connecting in progress...", "success");
+            const badge = document.getElementById("valWifiBadge");
+            if (badge) {
+                badge.textContent = "CONNECTING...";
+                badge.style.color = "#38bdf8";
+            }
+        } catch (e) {
+            log(`Wi-Fi provisioning error: ${e.message}`, "error");
+        }
     };
 </script>
 

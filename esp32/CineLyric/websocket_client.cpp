@@ -16,56 +16,67 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             Serial.printf("[WSc] Disconnected!\n");
             break;
         case WStype_CONNECTED:
-            Serial.printf("[WSc] Connected to url: %s\n", payload);
+            Serial.printf("[WSc] Connected to url: %.*s\n", (int)length, (char*)payload);
             break;
         case WStype_TEXT:
         {
-            Serial.printf("[WSc] get text: %s\n", payload);
+            // Bounded log output - prevents reading past payload buffer
+            Serial.printf("[WSc] get text (len %u): %.*s\n", (unsigned int)length, (int)length, (char*)payload);
             
-            // Parse JSON with adequate buffer size
+            // Parse JSON passing explicit length
             StaticJsonDocument<1024> doc;
-            DeserializationError error = deserializeJson(doc, payload);
+            DeserializationError error = deserializeJson(doc, payload, length);
             
             if (error) {
-                Serial.print(F("deserializeJson() failed: "));
+                Serial.print(F("[WSc] deserializeJson() failed: "));
                 Serial.println(error.f_str());
                 return;
             }
             
             AnimPacket pkt;
-            strncpy(pkt.lyric, doc["lyric"] | "", sizeof(pkt.lyric) - 1); pkt.lyric[sizeof(pkt.lyric) - 1] = '\0';
-            strncpy(pkt.nextLyric, doc["next"] | "", sizeof(pkt.nextLyric) - 1); pkt.nextLyric[sizeof(pkt.nextLyric) - 1] = '\0';
-            strncpy(pkt.animType, doc["animation"] | "fade", sizeof(pkt.animType) - 1); pkt.animType[sizeof(pkt.animType) - 1] = '\0';
-            strncpy(pkt.title, doc["title"] | "", sizeof(pkt.title) - 1); pkt.title[sizeof(pkt.title) - 1] = '\0';
-            strncpy(pkt.artist, doc["artist"] | "", sizeof(pkt.artist) - 1); pkt.artist[sizeof(pkt.artist) - 1] = '\0';
+            memset(&pkt, 0, sizeof(pkt));
+
+            const char* lyricStr = doc["lyric"] | "";
+            const char* nextStr = doc["next"] | "";
+            const char* animStr = doc["animation"] | "fade";
+            const char* titleStr = doc["title"] | "";
+            const char* artistStr = doc["artist"] | "";
+
+            strncpy(pkt.lyric, lyricStr, sizeof(pkt.lyric) - 1);
+            strncpy(pkt.nextLyric, nextStr, sizeof(pkt.nextLyric) - 1);
+            strncpy(pkt.animType, animStr, sizeof(pkt.animType) - 1);
+            strncpy(pkt.title, titleStr, sizeof(pkt.title) - 1);
+            strncpy(pkt.artist, artistStr, sizeof(pkt.artist) - 1);
             
             // Fallback: If lyric is empty but title is present, display song title & artist!
             if (strlen(pkt.lyric) == 0 && strlen(pkt.title) > 0) {
                 strncpy(pkt.lyric, pkt.title, sizeof(pkt.lyric) - 1);
-                pkt.lyric[sizeof(pkt.lyric) - 1] = '\0';
                 strncpy(pkt.nextLyric, pkt.artist, sizeof(pkt.nextLyric) - 1);
-                pkt.nextLyric[sizeof(pkt.nextLyric) - 1] = '\0';
             }
             
-            pkt.bpm = doc["bpm"] | 120.0;
-            pkt.energy = doc["energy"] | 0.5;
+            pkt.bpm = doc["bpm"] | 120.0f;
+            pkt.energy = doc["energy"] | 0.5f;
             pkt.duration = doc["duration"] | 5000;
             
-            pkt.beatStrength = doc["beatStrength"] | 0.5;
-            pkt.bass = doc["bass"] | 0.5;
+            pkt.beatStrength = doc["beatStrength"] | 0.5f;
+            pkt.bass = doc["bass"] | 0.5f;
             
-            strncpy(pkt.emotion, doc["emotion"] | "Calm", sizeof(pkt.emotion) - 1); pkt.emotion[sizeof(pkt.emotion) - 1] = '\0';
-            strncpy(pkt.scene, doc["scene"] | "Verse", sizeof(pkt.scene) - 1); pkt.scene[sizeof(pkt.scene) - 1] = '\0';
-            strncpy(pkt.secondary, doc["secondary"] | "None", sizeof(pkt.secondary) - 1); pkt.secondary[sizeof(pkt.secondary) - 1] = '\0';
-            strncpy(pkt.font, doc["font"] | "Medium", sizeof(pkt.font) - 1); pkt.font[sizeof(pkt.font) - 1] = '\0';
+            const char* emotionStr = doc["emotion"] | "Calm";
+            const char* sceneStr = doc["scene"] | "Verse";
+            const char* secondaryStr = doc["secondary"] | "None";
+            const char* fontStr = doc["font"] | "Medium";
+            const char* particlesStr = doc["particles"] | "None";
+
+            strncpy(pkt.emotion, emotionStr, sizeof(pkt.emotion) - 1);
+            strncpy(pkt.scene, sceneStr, sizeof(pkt.scene) - 1);
+            strncpy(pkt.secondary, secondaryStr, sizeof(pkt.secondary) - 1);
+            strncpy(pkt.font, fontStr, sizeof(pkt.font) - 1);
+            strncpy(pkt.particles, particlesStr, sizeof(pkt.particles) - 1);
             
             pkt.x = doc["x"] | 64;
             pkt.y = doc["y"] | 32;
             pkt.shake = doc["shake"] | false;
-            bool invert = doc["invert"] | false;
-            pkt.invert = invert;
-            
-            strncpy(pkt.particles, doc["particles"] | "None", sizeof(pkt.particles) - 1); pkt.particles[sizeof(pkt.particles) - 1] = '\0';
+            pkt.invert = doc["invert"] | false;
             
             bool isPlaying = doc["is_playing"] | true;
             
@@ -85,7 +96,13 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 }
 
 void websocketSetup() {
-    webSocket.beginSSL(WEBSOCKET_HOST, WEBSOCKET_PORT, WEBSOCKET_PATH);
+    String path = WEBSOCKET_PATH;
+    if (strlen(WEBSOCKET_TOKEN) > 0) {
+        path += "?token=";
+        path += WEBSOCKET_TOKEN;
+    }
+    Serial.printf("[WSc] Initializing SSL WebSocket to %s:%d%s\n", WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
+    webSocket.beginSSL(WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
     webSocket.onEvent(webSocketEvent);
     webSocket.setReconnectInterval(5000);
 }

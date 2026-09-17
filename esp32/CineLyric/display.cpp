@@ -48,8 +48,8 @@ void drawScrollingText(const char* text, int y, const uint8_t* font) {
         return;
     }
     
-    long t = millis() / 25; // scroll speed
-    int scrollOffset = t % (width + 64);
+    unsigned long t = millis() / 25; // scroll speed (unsigned to avoid overflow wrap)
+    int scrollOffset = (int)(t % (unsigned long)(width + 64));
     int x = 64 - scrollOffset;
     u8g2.drawUTF8(x, y, text);
 }

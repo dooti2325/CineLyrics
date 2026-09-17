@@ -101,10 +101,19 @@ void websocketSetup() {
         path += "?token=";
         path += WEBSOCKET_TOKEN;
     }
-    Serial.printf("[WSc] Initializing SSL WebSocket to %s:%d%s\n", WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
-    webSocket.beginSSL(WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
+    
+    if (WEBSOCKET_PORT == 443) {
+        Serial.printf("[WSc] Initializing SSL WebSocket (WSS) to %s:%d%s\n", WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
+        webSocket.beginSSL(WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
+    } else {
+        Serial.printf("[WSc] Initializing plain WebSocket (WS) to %s:%d%s\n", WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
+        webSocket.begin(WEBSOCKET_HOST, WEBSOCKET_PORT, path.c_str());
+    }
+    
     webSocket.onEvent(webSocketEvent);
     webSocket.setReconnectInterval(5000);
+    // Send ping every 15s, expect pong within 3s, drop if 2 fails (prevents Render/NAT timeouts)
+    webSocket.enableHeartbeat(15000, 3000, 2);
 }
 
 void websocketLoop() {
